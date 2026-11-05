@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
-import {ZONES,STATIONS,HIDE_SPOTS,ARENAS} from './layout.js';
+import {ZONES,STATIONS,HIDE_SPOTS,ARENAS,SERVICE_DOORS,PASSAGES,TAPES} from './layout.js';
 import {createAtmosphere,makeWeatheredMaterial} from './atmosphere.js';
 
 const bounds={minX:-46,maxX:48,minZ:-84,maxZ:9};
@@ -22,12 +22,13 @@ const height=z=>z.minZ<=-66?3.6:z.minX===-8&&z.maxX===8?5.2:3.9;
 const near=(a,b)=>Math.abs(a-b)<.01;
 function portals(zone,side){
  const {minX:a,maxX:b,minZ:c,maxZ:d}=zone;
+ const service=z=>[z-1.05,z+1.05];
  if(a===-8&&b===8){if(side==='n')return[[-3,3]];if(side==='w'||side==='e')return[[-3,3]];}
- if(a===-3&&b===3){if(side==='s')return[[-3,3]];if(side==='n')return[[-2.5,2.5]];if(side==='w')return[[-22.5,-19.5],[-50.5,-47.5]];if(side==='e')return[[-35.5,-32.5]];}
+ if(a===-3&&b===3){if(side==='s')return[[-3,3]];if(side==='n')return[[-2.5,2.5]];if(side==='w')return[[-22.5,-19.5],service(SERVICE_DOORS.records),[-50.5,-47.5]];if(side==='e')return[[-35.5,-32.5],service(SERVICE_DOORS.workshop)];}
  if(c===-3&&d===3&&(a===-34||a===8)){if(side==='w'||side==='e')return[[-3,3]];}
  if(a===-46&&side==='e'||a===34&&side==='w')return[[-3,3]];
- if(b===-3&&c===-28&&side==='e')return[[-22.5,-19.5]];
- if(a===3&&c===-41&&side==='w')return[[-35.5,-32.5]];
+ if(b===-3&&c===-28&&side==='e')return[[-22.5,-19.5],service(SERVICE_DOORS.records)];
+ if(a===3&&c===-41&&side==='w')return[[-35.5,-32.5],service(SERVICE_DOORS.workshop)];
  if(b===-3&&c===-56&&side==='e')return[[-50.5,-47.5]];
  if(c===-84&&side==='s')return[[-2.5,2.5]];
  return[];
@@ -111,6 +112,26 @@ export function createWorld(canvas,{quality='high'}={}){
  }
  // Door reveals are thick, worn, human-scale structures rather than glowing portals.
  const doorFrames=[[-3,-21,Math.PI/2], [3,-34,Math.PI/2],[-3,-49,Math.PI/2],[0,-66,0],[-8,0,Math.PI/2],[8,0,Math.PI/2],[-34,0,Math.PI/2],[34,0,Math.PI/2],[0,-8,0]];
+ for(const [room,x] of [['records',-3],['workshop',3]]){
+  const z=SERVICE_DOORS[room];
+  for(const dz of [-1.02,1.02])box('metal',x,1.5,z+dz,.25,3,.13);
+  box('metal',x,3,z,.25,.18,2.12);
+  sign(room==='records'?'RECORDS SERVICE':'WORKSHOP SERVICE','Secondary entrance',x*.95,3.28,z,x<0?Math.PI/2:-Math.PI/2,2.02,.55);
+ }
+ for(const pa of Object.values(PASSAGES)){
+  const z=pa.position.z;
+  box('metal',2.82,1.25,z,.18,.48,.43);
+  box('amber',2.718,1.29,z,.025,.09,.13);
+  sign('PA TEST','One fuse / press USE',2.85,1.74,z,-Math.PI/2,1.05,.37);
+ }
+ for(const tape of TAPES){
+  const {x,z}=tape.position;
+  box('metal',x,.44,z,.57,.88,.36);
+  box('dark',x,.92,z,.42,.15,.28);
+  for(const dx of [-.11,.11])cylinder('metal',x+dx,1.005,z,.067,.067,.024);
+  box('amber',x,.946,z+.147,.11,.04,.022);
+  sign(tape.label.replace('Tape: ',''),'USE TO PLAY RECORDING',x,1.18,z,0,1.2,.32);
+ }
  for(const [x,z,ry]of doorFrames){const wide=z===-66?5:ry?3:6;for(const side of [-1,1]){const dx=Math.cos(ry)*side*(wide/2-.05),dz=Math.sin(ry)*side*(wide/2-.05);box('metal',x+dx,1.5,z+dz,.18,3,.18);}box('metal',x,3,z,wide,.18,.26,[0,ry,0]);}
  // Lodge: damp reception, fireplace, abandoned furniture and weather station charts.
  box('wood',4,.5,4,3.4,1,1.3);box('black',4,1.05,4,3.55,.10,1.45);box('metal',4.7,1.28,4,.7,.38,.22,[.12,0,0]);box('black',4.7,1.31,3.87,.54,.24,.018);

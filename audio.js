@@ -69,7 +69,7 @@ export function createAudio() {
       context=null;master=null;ambience=null;breath=null;
     }
   }
-  function cue(name) {
+  function cue(name,pan=0) {
     if(!started || disposed)return;
     switch(name) {
       case 'interact': tone(720,390,.13,.11,'triangle');noise(.12,.06,1200);break;
@@ -77,6 +77,18 @@ export function createAudio() {
       case 'arc': noise(.19,.22,1900,.8);tone(330,62,.17,.13,'triangle');break;
       case 'sonar': tone(502,489,.6,.14,'sine');tone(757,729,.43,.055,'sine',.04);break;
       case 'cryo': noise(.43,.18,1120,.65);noise(.23,.09,410,1.4,.08);break;
+      case 'hall-warning':
+        noise(.78,.19,320,.7,0,pan);
+        tone(153,59,.58,.18,'triangle',.28,pan);
+        break;
+      case 'pa-test':
+        for(const delay of [0,.48,1.06])tone(445,418,.25,.17,'triangle',delay,pan);
+        noise(.75,.10,1100,.9,.12,pan);
+        break;
+      case 'door-close':
+        noise(.23,.12,290,.8,0,pan);
+        tone(123,52,.25,.1,'triangle',0,pan);
+        break;
       case 'knock':
         for(const [delay,pan] of [[0,-.55],[.17,-.55],[.72,.65]]){
           tone(158,63,.14,.19,'triangle',delay,pan);

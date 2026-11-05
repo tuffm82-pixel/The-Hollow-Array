@@ -7,7 +7,8 @@ import {createMonster} from './catalogue-creatures.js';
 import {createAudio} from './audio.js';
 import {createCampaign} from './campaign.js';
 import {nextWaypoint} from './navigation.js';
-import {STAGES,STATIONS,LOCKERS,CREATURES,ARENAS,ZONES,checkpointSpawn} from './layout.js';
+import {STAGES,STATIONS,LOCKERS,CREATURES,ARENAS,ZONES,PASSAGES,TAPES,checkpointSpawn} from './layout.js';
+import {createPassage,callSpeaker,advancePassage,retreatPassage,passageTarget} from './passage.js';
 import {perceive} from './perception.js';
 import {createTasks} from './tasks.js';
 import {createVoice} from './voice.js';
@@ -27,6 +28,11 @@ let world,monster,actors=[],tools=createToolState(),campaign=createCampaign(),mo
 let attack=null,hands=null,equipment=null,lastTransmission='',nextScare=35,finale=null,finaleCompleted=false,finaleVoice=false;
 let lastFrame=performance.now(),lastUi=0,runToggle=false,stamina=1,exhausted=false,fireInput=null,nearest=null;
 let arenaState=createArenaState();
+let passage=createPassage(),passageView=null;
+function resetPassage(){
+ passage=createPassage();
+ if(passageView)passageView.group.visible=false;
+}
 const player={x:0,z:4,yaw:0,pitch:0,moving:false,running:false,hidden:false,noiseTime:-1,noisyTask:false};
 let enemy={x:0,z:-39,alert:0,lastKnown:{x:0,z:0},seenHiding:false,speed:0};
 const lockers=LOCKERS;
@@ -43,6 +49,7 @@ function home(){mode='home';resetInput();tasks.close();voice.stop();player.hidde
 function begin(checkpoint=0){
  campaign=createCampaign(checkpoint);gameTime=0;grace=15;scareCooldown=15;stamina=1;exhausted=false;stepTime=0;endingTime=0;attack=null;nextScare=35;finaleCompleted=false;finaleVoice=false;tasks.close();if(hands)hands.visible=false;$('death-shade').style.opacity=0;
  arenaState=createArenaState();
+ resetPassage();
  Object.assign(player,checkpointSpawn(campaign.state.chapter),{pitch:0,hidden:false,moving:false,running:false,noiseTime:-1,noisyTask:false,health:3,hurtUntil:0});
  tools=createToolState(campaign.state.inventory);
  for(const a of actors){const data=CREATURES[a.type];Object.assign(a,{x:data.spawn.x,z:data.spawn.z,hp:campaign.state.defeated.includes(a.type)?0:data.health,cycle:0,frozen:0,revealed:0,arenaBroken:false,arenaWindow:0,echo:false,deathTime:campaign.state.defeated.includes(a.type)?3:0,alert:0,visual:false,seenHiding:false,speed:0,stride:0,lastNoise:-1,lastKnown:{...data.home}});a.view.group.position.set(a.x,0,a.z);a.view.group.rotation.y=0;a.view.group.visible=false;}
@@ -72,6 +79,18 @@ function use(){
  if(player.hidden){hide();return;}
  if(!nearest){say('Move closer to a marked station, then tap USE.',4,false);return;}
  const stage=STAGES[campaign.state.chapter];
+ if(nearest.message){
+  voice.stop();audio.cue('interact');say(nearest.message,19);
+  return;
+ }
+ if(nearest.id==='passage-pa'){
+  if(callSpeaker(passage)){
+   const speaker=PASSAGES[stage.id].speaker;
+   audio.cue('pa-test',soundPan(speaker));
+   say('PA test sounding down the hall. Take the other door while it turns.',6,false);
+  }else say(passage.used?'The PA fuse has blown.':'Listen first. Use the switch when the footsteps start.',4,false);
+  return;
+ }
  if(stage.id==='exit'&&nearest.id==='exit'&&campaign.state.extractionRemaining<=0){
   tasks.open({id:'exit',puzzle:'decision'});resetInput();return;
  }
@@ -98,6 +117,7 @@ function completeStation(id,{combatWon=false,choice}={}){
  const result=campaign.interact(id,{combatWon,choice});if(result.ok)voice.stop();say(result.message,15,result.ok);if(result.cue)audio.cue(result.cue);
  if(!result.ok)return;
  arenaState=createArenaState();
+ resetPassage();
  save();
  tools.inventory=[...campaign.state.inventory];if(!tools.inventory.includes(tools.selected))tools.selected=tools.inventory[0]||'arc';
  if(STAGES[campaign.state.chapter]?.combat)grace=5;
@@ -108,13 +128,71 @@ function completeStation(id,{combatWon=false,choice}={}){
 }
 function hide(){
  if(mode!=='playing'||campaign.state.phase!=='playing')return;
- if(player.hidden){player.hidden=false;for(const a of actors)a.seenHiding=false;document.body.classList.remove('hidden-player');say('You step out. Walk quietly.',3,false);}
- else if(lockers.some(p=>dist(p,player)<2.3)){tasks.close();cancelFire();player.hidden=true;for(const a of actors)a.seenHiding=a.hp>0&&a.visual&&dist(a,player)<8&&lineOfSight(a,player);runToggle=false;document.body.classList.add('hidden-player');say(actors.some(a=>a.seenHiding)?'It saw you get in. This locker will not save you.':'Stay still. Let the footsteps pass.',5,false);}
+ if(player.hidden){player.hidden=false;passage.seenHiding=false;for(const a of actors)a.seenHiding=false;document.body.classList.remove('hidden-player');say('You step out. Walk quietly.',3,false);}
+ else if(lockers.some(p=>dist(p,player)<2.3)){tasks.close();cancelFire();player.hidden=true;for(const a of actors)a.seenHiding=a.hp>0&&a.visual&&dist(a,player)<8&&lineOfSight(a,player);passage.seenHiding=passage.visible&&dist(passage,player)<6&&lineOfSight(passage,player);runToggle=false;document.body.classList.add('hidden-player');say(passage.seenHiding||actors.some(a=>a.seenHiding)?'It saw you get in. This locker will not save you.':'Stay still. Let the footsteps pass.',5,false);}
  else say('Find a tall locker beside the main passage to hide.',4,false);
  $('hide').setAttribute('aria-pressed',String(player.hidden));
 }
 function walkable(x,z){return isWalkable(x,z,.28);}
 function lineOfSight(a,b){return world.hasLineOfSight(a,b);}
+function soundPan(point){
+ const dx=point.x-player.x,dz=point.z-player.z;
+ return (dx*Math.cos(player.yaw)-dz*Math.sin(player.yaw))/Math.max(1,Math.hypot(dx,dz));
+}
+function updatePassage(dt){
+ const config=PASSAGES[campaign.state.objective.id];
+ if(!config)return 0;
+ const event=advancePassage(config,passage,dt,player);
+ if(event==='warning'){
+  audio.cue('hall-warning',soundPan(passage));
+  say('Metal scrapes down the passage. Walk quietly or draw it away with the PA.',5,false);
+ }
+ if(event==='quiet'){
+  passageView.group.visible=false;
+  audio.cue('door-close',soundPan(passage));
+  say('The footsteps fade. You have a clear moment to move.',4,false);
+ }
+ if(passage.phase!=='patrol'&&passage.phase!=='retreat')return 0;
+ if(!passageView){
+  passageView=createMonster('graft');
+  passageView.group.name='The hallway copy';
+  world.scene.add(passageView.group);
+ }
+ const distance=dist(passage,player);
+ const clear=lineOfSight({...passage,y:1.9},{...player,y:world.camera.position.y});
+ const safeRoom=Math.abs(player.x)>=3.05;
+ const sense=perceive(passage,player,{yaw:passage.yaw,clear,noiseFresh:passage.heard!==player.noiseTime});
+ passage.heard=player.noiseTime;
+ if(safeRoom||passage.phase==='retreat'){sense.visible=false;sense.heard=false;}
+ passage.visible=sense.visible;
+ const destination=passageTarget(config,passage,sense,dt);
+ // Keep the copy in the hall, even if the last noise came from a doorway.
+ const target={x:clamp(destination.x,-2,2),z:clamp(destination.z,config.minZ,config.maxZ)};
+ const waypoint=nextWaypoint(passage,target),dx=waypoint.x-passage.x,dz=waypoint.z-passage.z;
+ const length=Math.hypot(dx,dz),speed=passage.phase==='retreat'?3.4:sense.visible?2.9:1.85;
+ let travel=0;
+ if(length>.08){
+  const step=Math.min(length,dt*speed),x=passage.x+dx/length*step,z=passage.z+dz/length*step;
+  if(walkable(x,z)){travel=step;passage.x=x;passage.z=z;}
+  const heading=Math.atan2(-dx,-dz),difference=heading-passage.yaw;
+  passage.yaw+=Math.atan2(Math.sin(difference),Math.cos(difference))*Math.min(1,dt*6);
+ }
+ passageView.group.visible=true;
+ passageView.group.position.set(passage.x,0,passage.z);
+ passageView.group.rotation.y=passage.yaw;
+ passageView.update(dt,gameTime,{speed:travel>0?speed:0});
+ passage.stride+=travel;
+ if(passage.stride>.95){
+  passage.stride=0;
+  audio.footstep({surface:'stone',weight:1.65,pan:soundPan(passage),muffled:!clear,volume:Math.max(0,1-distance/22)**2*.8});
+ }
+ if(passage.phase==='patrol'&&!safeRoom&&sense.visible&&distance<1.12&&gameTime>player.hurtUntil){
+  player.health--;player.hurtUntil=gameTime+2;
+  if(player.health<=0){monster=passageView;caught('Something in the hall answered with your voice.');return 1;}
+  retreatPassage(passage);audio.cue('grab');say('It struck once, then backed away. Get through a door now.',5,false);
+ }
+ return sense.visible?clamp(1-distance/18,.2,.88):distance<12?.16:0;
+}
 function updateEnemy(dt){
  let nearestActor=null,nearestDistance=Infinity,threat=.03;
  for(const a of actors){
@@ -245,7 +323,11 @@ function updateHUD(){
   $('direction').style.transform=`rotate(${angle}rad)`;
   $('distance').textContent=`${arena&&arenaState.armed?'Marked hazard':objective.label} · ${Math.ceil(dist(player,marker))} M`;
  }
- nearest=world.interactables.find(p=>p.id===state.objective.id&&dist(p.position,player)<2.5)||world.interactables.find(p=>dist(p.position,player)<2.5)||null;
+ const intercom=PASSAGES[state.objective.id];
+ nearest=world.interactables.find(p=>p.id===state.objective.id&&dist(p.position,player)<2.5)
+  ||(intercom&&dist(intercom.position,player)<1.85?{...intercom,id:'passage-pa'}:null)
+  ||TAPES.find(tape=>dist(tape.position,player)<1.75)
+  ||world.interactables.find(p=>dist(p.position,player)<2.5)||null;
  $('interact').classList.toggle('near',!!nearest);$('context-hint').textContent=player.hidden?'HIDDEN · TAP HIDE TO LEAVE':nearest?`USE · ${nearest.label}`:'';
  $('sprint').setAttribute('aria-pressed',String(player.running));$('sprint').textContent=stamina<.15?'TIRED':'RUN';$('hide').setAttribute('aria-pressed',String(player.hidden));
  const ready=!tools.cooldown&&tools.inventory.includes(tools.selected);
@@ -254,19 +336,25 @@ function updateHUD(){
  for(const b of document.querySelectorAll('#tool-bar button')){b.disabled=!tools.inventory.includes(b.dataset.tool);b.classList.toggle('selected',b.dataset.tool===tools.selected);}
  $('creature-status').textContent=current&&dist(current,player)<24?`${CREATURES[current.type].name} · ${current.hp}/${CREATURES[current.type].health} · ${open?'EXPOSED':current.arenaBroken?'ARMOURED':'SEALED'}`:'';
  $('health').textContent=`HEALTH ${'●'.repeat(player.health||0)}${'○'.repeat(3-(player.health||0))}`;
- $('danger-text').textContent=state.extractionRemaining>0?`LIFT ${Math.ceil(state.extractionRemaining)} S`:enemy.visual?'IT SEES YOU':enemy.alert>0?'SEARCHING':'STORM RESERVE';$('threat-fill').style.width=`${Math.round(state.threat*100)}%`;
+ $('danger-text').textContent=state.extractionRemaining>0?`LIFT ${Math.ceil(state.extractionRemaining)} S`:enemy.visual||passage.visible?'IT SEES YOU':passage.decoy>0&&passage.phase==='patrol'?'PA DIVERSION':enemy.alert>0||passage.phase==='patrol'?'SEARCHING':'STORM RESERVE';$('threat-fill').style.width=`${Math.round(state.threat*100)}%`;
 }
 function frame(now){
  requestAnimationFrame(frame);const dt=Math.min(.05,Math.max(0,(now-lastFrame)/1000));lastFrame=now;
  if(!world)return;
- if(mode==='home'){for(const a of actors)a.view.group.visible=false;world.camera.position.set(1.3,1.68,6);world.camera.rotation.set(-.025,Math.sin(now*.00008)*.13,0,'YXZ');monster.group.visible=false;world.update(dt,now/1000,player,{brightness:prefs.brightness,flashlight:true});}
+ if(mode==='home'){for(const a of actors)a.view.group.visible=false;if(passageView)passageView.group.visible=false;world.camera.position.set(1.3,1.68,6);world.camera.rotation.set(-.025,Math.sin(now*.00008)*.13,0,'YXZ');monster.group.visible=false;world.update(dt,now/1000,player,{brightness:prefs.brightness,flashlight:true});}
  if(mode==='cinematic'){finale.update(dt);if(finale.time>5.5&&!finaleVoice){finaleVoice=true;audio.cue('scare');voice.speak(campaign.state.choice==='cut'?'Keep the light on.':'Where did you leave your gloves?',{speaker:campaign.state.choice==='cut'?'radio':'mimic',interrupt:true});}finale.render();if(finale.done){finaleCompleted=true;finish();}return;}
  if(mode==='playing'){
   gameTime+=dt;updateTools(tools,dt);grace=Math.max(0,grace-dt);scareCooldown-=dt;
   if(campaign.state.phase==='playing'){
    move(dt);if(tasks.active){const station=STATIONS.find(p=>p.id===tasks.id);if(!station||dist(station.position,player)>3)tasks.close();else tasks.update(dt);}
    const event=tasks.id==='exit'?null:campaign.update(dt,player);if(event){say(event.message,12);if(event.cue&&event.event!=='death')audio.cue(event.cue);}
-   if(campaign.state.phase==='playing'){const proximity=updateEnemy(dt);audio.setThreat(Math.max(proximity,campaign.state.threat*.5));document.documentElement.style.setProperty('--danger',proximity.toFixed(2));}
+   if(campaign.state.phase==='playing'){
+    const enemyThreat=updateEnemy(dt);
+    const passageThreat=campaign.state.phase==='playing'?updatePassage(dt):0;
+    const proximity=Math.max(enemyThreat,passageThreat);
+    audio.setThreat(Math.max(proximity,campaign.state.threat*.5));
+    document.documentElement.style.setProperty('--danger',proximity.toFixed(2));
+   }
    else if(campaign.state.phase==='dead'&&!attack)startDeath(false);
    if(gameTime>nextScare&&campaign.state.chapter>=2){audio.cue('whisper');nextScare=gameTime+45+campaign.state.chapter*7;}
   }
@@ -321,7 +409,7 @@ if(import.meta.env.DEV&&new URLSearchParams(location.search).has('qa'))window.__
  attack(){monster.group.position.set(player.x-Math.sin(player.yaw),0,player.z-Math.cos(player.yaw));caught('The creature takes hold of your expedition suit.');}
 };
 function makeHands(){const group=new THREE.Group(),mat=new THREE.MeshStandardMaterial({color:'#394c50',roughness:.7});for(const side of [-1,1]){const arm=new THREE.Mesh(new THREE.CapsuleGeometry(.055,.25,4,8),mat);arm.position.set(side*.24,-.22,-.43);arm.rotation.set(-.9,0,side*-.35);const palm=new THREE.Mesh(new THREE.BoxGeometry(.10,.14,.055),mat);palm.position.set(side*.2,-.06,-.56);palm.rotation.x=-.5;group.add(arm,palm);}group.visible=false;world.camera.add(group);return group;}
-try{world=createWorld($('scene'),{quality:prefs.quality});actors=Object.keys(CREATURES).map(type=>{const view=createMonster(type);world.scene.add(view.group);view.group.visible=false;return{type,view,...CREATURES[type].spawn,hp:CREATURES[type].health,cycle:0,frozen:0,revealed:0,deathTime:0};});enemy=actors[0];monster=enemy.view;hands=makeHands();finale=createFinale(world.renderer,{reducedMotion:prefs.reducedMotion});bind();applyPreferences();home();world.resize();requestAnimationFrame(frame);document.body.dataset.ready='true';if(import.meta.env.DEV)window.__hollowInspect=()=>({mode,player:{...player},enemy:{...enemy},campaign:campaign.snapshot(),tools:{...tools},monsters:actors.map(a=>({type:a.type,x:a.x,z:a.z,hp:a.hp,cycle:a.cycle,frozen:a.frozen,revealed:a.revealed,arenaBroken:a.arenaBroken,arenaWindow:a.arenaWindow,visible:a.view.group.visible})),task:tasks.state?{...tasks.state}:null,attack:attack?{time:attack.time,creature:attack.creature}:null,camera:{y:world.camera.position.y,roll:world.camera.rotation.z},drawCalls:world.renderer.info.render.calls,triangles:world.renderer.info.render.triangles});}catch(error){console.error(error);$('fatal').hidden=false;}
+try{world=createWorld($('scene'),{quality:prefs.quality});actors=Object.keys(CREATURES).map(type=>{const view=createMonster(type);world.scene.add(view.group);view.group.visible=false;return{type,view,...CREATURES[type].spawn,hp:CREATURES[type].health,cycle:0,frozen:0,revealed:0,deathTime:0};});enemy=actors[0];monster=enemy.view;hands=makeHands();finale=createFinale(world.renderer,{reducedMotion:prefs.reducedMotion});bind();applyPreferences();home();world.resize();requestAnimationFrame(frame);document.body.dataset.ready='true';if(import.meta.env.DEV)window.__hollowInspect=()=>({mode,player:{...player},enemy:{...enemy},campaign:campaign.snapshot(),passage:{...passage},tools:{...tools},monsters:actors.map(a=>({type:a.type,x:a.x,z:a.z,hp:a.hp,cycle:a.cycle,frozen:a.frozen,revealed:a.revealed,arenaBroken:a.arenaBroken,arenaWindow:a.arenaWindow,visible:a.view.group.visible})),task:tasks.state?{...tasks.state}:null,attack:attack?{time:attack.time,creature:attack.creature}:null,camera:{y:world.camera.position.y,roll:world.camera.rotation.z},drawCalls:world.renderer.info.render.calls,triangles:world.renderer.info.render.triangles});}catch(error){console.error(error);$('fatal').hidden=false;}
 
 
 

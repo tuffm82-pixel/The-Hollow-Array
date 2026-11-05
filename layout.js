@@ -13,6 +13,16 @@ export const ZONES=Object.freeze([
 ]);
 export const HIDE_SPOTS=Object.freeze([{x:-6,z:5},{x:-30,z:1.5},{x:29,z:-1.5},{x:-1.8,z:-16},{x:1.8,z:-29},{x:-1.8,z:-43},{x:1.8,z:-59},{x:11,z:-69}]);
 export const LOCKERS=HIDE_SPOTS;
+export const SERVICE_DOORS=Object.freeze({records:-25.4,workshop:-37.4});
+export const PASSAGES=Object.freeze({
+ records:{minZ:-28,maxZ:-11,position:{x:1.55,z:-13},speaker:{x:0,z:-27},label:'Hall PA test switch'},
+ archive:{minZ:-47,maxZ:-22,position:{x:1.55,z:-42},speaker:{x:0,z:-46},label:'Service PA test switch'},
+});
+export const TAPES=Object.freeze([
+ {id:'tape-lodge',position:{x:5.3,z:-2.3},label:'Tape: The night shift',message:'MARA, NIGHT SHIFT · If my voice tells you to run, listen first. The thing only found us after Owen ran down the hall. Walking and the shelter cupboards kept the rest of us out of sight.'},
+ {id:'tape-records',position:{x:-9,z:-24.2},label:'Tape: The PA test',message:'OWEN, PA TEST · The speakers still draw it. Hit the test switch once, then take the other records door. I cut a service entrance at the south end of the shelves.'},
+ {id:'tape-infirmary',position:{x:39,z:3.6},label:'Tape: Proof of life',message:'MARA, PRIVATE TAPE · If you hear me ask you to answer the intercom, walk away from it. I can open the lift by hand. I never needed your voice.'},
+]);
 export const ARENAS=Object.freeze({
  graft:{zone:'generator',station:'hound',panel:{x:-36.5,z:-4.8},hazard:{x:-39,z:-2},radius:1.8,kind:'lure',label:'Load-test breaker',instruction:'Use the breaker. The Runner follows the sound to the live grate. Shoot when its chest opens.'},
  widow:{zone:'conservatory',station:'widow',panel:{x:-8,z:-47.3},hazard:{x:-12,z:-49},radius:2.6,kind:'spray',label:'Coolant valve',instruction:'Open the coolant valve, then draw the Stalker across the marked tiles. Circle the planters to stay out of its reach.'},
@@ -39,12 +49,12 @@ export const STAGES=Object.freeze([
  {id:'desk',title:'01 / The last expedition',description:'Open the equipment case in the lodge. Take the Arc Spool.',reward:'arc'},
  {id:'generator',title:'02 / Power beneath the snow',description:'Follow the west passage. Match three generator circuit banks.',puzzle:'circuits'},
  {id:'hound',title:'03 / The thing that answers',description:ARENAS.graft.instruction,combat:'graft'},
- {id:'records',title:'04 / An instrument that listens',description:'Find the Resonance Fork in the observation records room.',reward:'sonar'},
+ {id:'records',title:'04 / Something in the passage',description:'Reach Records. Walk to stay quiet, or use the PA test switch to draw it away. Records has two doors.',reward:'sonar'},
  {id:'infirmary',title:'05 / Cold enough to stop a heart',description:'Search the east infirmary. Collect the Cryo Lantern and read the field notes.',reward:'cryo'},
  {id:'workshop',title:'06 / Steady hands',description:'Calibrate the tools at the workshop pressure bench.',puzzle:'pressure'},
  {id:'widow',title:'07 / The garden remembers',description:ARENAS.widow.instruction,combat:'widow'},
  {id:'sample',title:'08 / What the roots were hiding',description:'Recover the relay prism from the empty containment cradle.'},
- {id:'archive',title:'09 / The mountain is hollow',description:'Unseal the records cabinet. Infirmary note: 6318.',puzzle:'code'},
+ {id:'archive',title:'09 / Footsteps on the stairs',description:'Get back to Records through the service door. Use the PA or a cupboard to lose the patrol. Cabinet code: 6318.',puzzle:'code'},
  {id:'relay',title:'10 / Open the dome',description:'Retune the workshop relay and restore telescope power.',puzzle:'frequency'},
  {id:'signal',title:'11 / Do not repeat the voice',description:'Calibrate the telescope receiver by repeating its light sequences.',puzzle:'sequence'},
  {id:'cantor',title:'12 / It knows your voice',description:ARENAS.cantor.instruction,combat:'cantor'},
