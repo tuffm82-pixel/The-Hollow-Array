@@ -6,13 +6,14 @@ import {createAtmosphere,makeWeatheredMaterial} from './atmosphere.js';
 const bounds={minX:-46,maxX:48,minZ:-84,maxZ:9};
 export const SOLID_PROPS=Object.freeze([
  {x:4,z:4,halfX:1.7,halfZ:.65},{x:-5.6,z:3,halfX:.9,halfZ:1.65},{x:-5.6,z:-3.8,halfX:.9,halfZ:1.65},
+ {x:6.5,z:-5.4,halfX:.7,halfZ:1.75,height:3.2},
  {x:-41,z:-5.5,halfX:1.8,halfZ:1.5},{x:-44,z:5.8,halfX:.7,halfZ:1.4},
  ...[39,44].flatMap(x=>[-5.6,5.6].map(z=>({x,z,halfX:1.2,halfZ:.7}))),
  ...[-17.6,-12,-6.4].flatMap(x=>[-26.5,-15.5].map(z=>({x,z,halfX:1.5,halfZ:.5}))),
  ...[7,16.5].map(x=>({x,z:-38.9,halfX:2,halfZ:.65})),
  ...[-20,-11].flatMap(x=>[-53.6,-44.4].map(z=>({x,z,halfX:2.7,halfZ:.7}))),
  {x:5,z:-75.5,halfX:1.75,halfZ:1.75},
- ...HIDE_SPOTS.map(p=>({x:p.x,z:p.z,halfX:Math.abs(p.x)>8?.3:.4,halfZ:Math.abs(p.x)>8?.4:.3})),
+ ...HIDE_SPOTS.map(p=>({x:p.x,z:p.z,halfX:Math.abs(p.x)>8?.3:.4,halfZ:Math.abs(p.x)>8?.4:.3,height:2.4})),
  ...STATIONS.filter(s=>!['hound','widow','cantor'].includes(s.id)).map(s=>({x:s.position.x,z:s.position.z-.8,halfX:.55,halfZ:.27})),
 ]);
 const height=z=>z.minZ<=-66?3.6:z.minX===-8&&z.maxX===8?5.2:3.9;
@@ -46,8 +47,11 @@ function buildWalls(){
  return Object.freeze(all);
 }
 export const OPAQUE_WALLS=buildWalls();
+const SIGHT_BLOCKERS=[...OPAQUE_WALLS,...SOLID_PROPS.filter(prop=>prop.height).map(prop=>({
+ x:prop.x,y:prop.height/2,z:prop.z,w:prop.halfX*2,h:prop.height,d:prop.halfZ*2
+}))];
 function hitSegment(a,b,box){let low=0,high=1;for(const [axis,size]of [['x','w'],['y','h'],['z','d']]){const q=a[axis],delta=b[axis]-q,min=box[axis]-box[size]/2,max=box[axis]+box[size]/2;if(Math.abs(delta)<1e-9){if(q<min||q>max)return false;continue;}let u=(min-q)/delta,v=(max-q)/delta;if(u>v)[u,v]=[v,u];low=Math.max(low,u);high=Math.min(high,v);if(low>high)return false;}return high>1e-5&&low<1-1e-5;}
-export function canSeeBetween(a,b){const p={x:a?.x,y:a?.y??1.65,z:a?.z},q={x:b?.x,y:b?.y??1.65,z:b?.z};if(![...Object.values(p),...Object.values(q)].every(Number.isFinite))return false;return !OPAQUE_WALLS.some(w=>hitSegment(p,q,w));}
+export function canSeeBetween(a,b){const p={x:a?.x,y:a?.y??1.65,z:a?.z},q={x:b?.x,y:b?.y??1.65,z:b?.z};if(![...Object.values(p),...Object.values(q)].every(Number.isFinite))return false;return !SIGHT_BLOCKERS.some(w=>hitSegment(p,q,w));}
 export function isWalkable(x,z,r=.28){
  if(!Number.isFinite(x)||!Number.isFinite(z)||r<0)return false;
  const inside=(px,pz)=>ZONES.some(q=>px>=q.minX&&px<=q.maxX&&pz>=q.minZ&&pz<=q.maxZ);
@@ -75,10 +79,21 @@ export function createWorld(canvas,{quality='high'}={}){
  function tube(name,points,r=.035){const curve=new THREE.CatmullRomCurve3(points.map(p=>new THREE.Vector3(...p)));append(name,new THREE.TubeGeometry(curve,Math.max(8,points.length*5),r,6,false),[0,0,0]);}
  function leaf(x,y,z,angle,length){const p=[],uv=[],tri=[];for(let j=0;j<=5;j++){const t=j/5,width=Math.sin(t*Math.PI)*.13;for(const side of [-1,1]){p.push(x+Math.cos(angle)*t*length-Math.sin(angle)*width*side,y+Math.sin(t*Math.PI)*.12-t*t*.26,z+Math.sin(angle)*t*length+Math.cos(angle)*width*side);uv.push(t,side>0?1:0);}if(j<5){const a=j*2;tri.push(a,a+1,a+2,a+1,a+3,a+2);}}const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(p,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setIndex(tri);g.computeVertexNormals();append('leaf',g,[0,0,0]);}
  function sign(title,sub,x,y,z,ry=0,w=2.4,h=.8){const texture=textTexture(title,sub);textures.push(texture);const m=new THREE.MeshBasicMaterial({map:texture,side:THREE.DoubleSide});const mesh=new THREE.Mesh(new THREE.PlaneGeometry(w,h),m);mesh.position.set(x,y,z);mesh.rotation.y=ry;scene.add(mesh);return mesh;}
+ // A shared contact-shadow texture anchors heavy furniture even on Battery saver.
+ const contactCanvas=document.createElement('canvas');contactCanvas.width=contactCanvas.height=64;
+ const contact=contactCanvas.getContext('2d'),fade=contact.createRadialGradient(32,32,12,32,32,31);
+ fade.addColorStop(0,'rgba(0,0,0,0.55)');fade.addColorStop(.55,'rgba(0,0,0,0.30)');fade.addColorStop(1,'rgba(0,0,0,0)');
+ contact.fillStyle=fade;contact.fillRect(0,0,64,64);
+ const contactMap=new THREE.CanvasTexture(contactCanvas);textures.push(contactMap);
+ materials.contact=new THREE.MeshBasicMaterial({map:contactMap,transparent:true,depthWrite:false});
+ for(const prop of SOLID_PROPS){
+  const geometry=new THREE.PlaneGeometry(prop.halfX*2+.72,prop.halfZ*2+.72);
+  append('contact',geometry,[prop.x,.006,prop.z],[-Math.PI/2,0,0]);
+ }
  // Frost forms at the edges, leaving the window centres readable. One small
  // locally generated map is shared by every pane and the conservatory roof.
  {const c=document.createElement('canvas');c.width=c.height=256;const x=c.getContext('2d');x.fillStyle='#49616a';x.fillRect(0,0,256,256);let seed=83017;const rand=()=>((seed=(Math.imul(seed,1664525)+1013904223)>>>0)/4294967296);for(let i=0;i<900;i++){const px=rand()*256,py=rand()*256,edge=Math.min(px,py,256-px,256-py),a=Math.max(.025,.28-edge/240);x.strokeStyle=`rgba(186,207,211,${a})`;x.lineWidth=.4+rand();x.beginPath();x.moveTo(px,py);x.lineTo(px+rand()*9-4,py+4+rand()*16);x.stroke();}for(let i=0;i<18;i++){x.fillStyle=`rgba(16,36,41,${.08+rand()*.08})`;x.fillRect(rand()*256,0,.5+rand()*2,100+rand()*156);}const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;textures.push(t);materials.glass.map=t;materials.glass.roughness=.45;}
- for(const zone of ZONES){const cx=(zone.minX+zone.maxX)/2,cz=(zone.minZ+zone.maxZ)/2,w=zone.maxX-zone.minX,d=zone.maxZ-zone.minZ,wood=zone.minX===-8&&zone.maxX===8;box(wood?'wood':zone.minZ===-56?'stone':'tile',cx,-.12,cz,w,.24,d);if(zone.minZ>-66&&zone.minZ!==-56)box('dark',cx,height(zone)+.08,cz,w,.16,d);
+ for(const zone of ZONES){const cx=(zone.minX+zone.maxX)/2,cz=(zone.minZ+zone.maxZ)/2,w=zone.maxX-zone.minX,d=zone.maxZ-zone.minZ,wood=zone.id==='lodge';box(wood?'wood':zone.id==='conservatory'?'stone':'tile',cx,-.12,cz,w,.24,d);if(zone.id!=='dome'&&zone.id!=='conservatory')box('dark',cx,height(zone)+.08,cz,w,.16,d);
   const border='metal';for(const x of [zone.minX+.25,zone.maxX-.25])box(border,x,.055,cz,.08,.08,d-.3);
  }
  for(const [wallIndex,wall] of OPAQUE_WALLS.entries()){
@@ -171,14 +186,20 @@ export function createWorld(canvas,{quality='high'}={}){
  const sources=[{x:0,y:4.5,z:0,color:'#dda971',power:34},{x:-40,y:3.25,z:2,color:'#dfaf76',power:37},{x:41,y:3.4,z:0,color:'#98bfce',power:32},{x:0,y:3.1,z:-17,color:'#a2c2ca',power:22},{x:-14,y:3.1,z:-21,color:'#d4b387',power:25},{x:13,y:3.2,z:-34,color:'#dbb58c',power:31},{x:0,y:3.1,z:-41,color:'#96b9c2',power:21},{x:-16,y:3.5,z:-49,color:'#91a6af',power:29},{x:0,y:7,z:-75,color:'#8caecc',power:48}];
  const lightPool=Array.from({length:6},()=>{const l=new THREE.PointLight('#aabfc7',0,18,2);scene.add(l);return l;});
  const torch=new THREE.SpotLight('#e4e3ce',32,25,Math.PI/5.2,.62,2);torch.position.set(.16,-.13,.03);torch.target.position.set(0,-.1,-14);camera.add(torch,torch.target);torch.shadow.mapSize.set(1024,1024);torch.shadow.camera.near=.1;torch.shadow.camera.far=26;torch.shadow.bias=-.0002;torch.shadow.normalBias=.025;
+ const beamCanvas=document.createElement('canvas');beamCanvas.width=beamCanvas.height=128;
+ const beam=beamCanvas.getContext('2d'),profile=beam.createRadialGradient(64,64,0,64,64,63);
+ for(const [position,color] of [[0,'#fff9e7'],[.19,'#fff3d9'],[.31,'#e7dcc5'],[.43,'#a5a396'],[.52,'#92948e'],[.66,'#797e7d'],[.84,'#525b5d'],[1,'#000']])profile.addColorStop(position,color);
+ beam.fillStyle=profile;beam.fillRect(0,0,128,128);
+ const beamMap=new THREE.CanvasTexture(beamCanvas);beamMap.colorSpace=THREE.SRGBColorSpace;
+ torch.map=beamMap;textures.push(beamMap);
  const fill=new THREE.PointLight('#9bb6c7',1.7,4,2);camera.add(fill);
  const atmo=createAtmosphere(scene,{bounds});
  function resize(){const w=canvas.clientWidth||innerWidth,h=canvas.clientHeight||innerHeight;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();}
  function setQuality(q){quality=q;renderer.setPixelRatio(Math.min(devicePixelRatio||1,q==='low'?1:1.5));renderer.shadowMap.enabled=q!=='low';torch.castShadow=q!=='low';resize();}
  function update(dt,time,player={},state={}){
-  const pos=Number.isFinite(player.x)?player:camera.position,blackout=THREE.MathUtils.clamp(Number(state.blackout)||0,0,1),threat=THREE.MathUtils.clamp(Number(state.threat)||0,0,1);const nearest=[...sources].sort((a,b)=>(a.x-pos.x)**2+(a.z-pos.z)**2-((b.x-pos.x)**2+(b.z-pos.z)**2));
+  const pos=camera.position,blackout=THREE.MathUtils.clamp(Number(state.blackout)||0,0,1),threat=THREE.MathUtils.clamp(Number(state.threat)||0,0,1);const nearest=[...sources].sort((a,b)=>(a.x-pos.x)**2+(a.z-pos.z)**2-((b.x-pos.x)**2+(b.z-pos.z)**2));
   lightPool.forEach((l,i)=>{const s=nearest[i];l.position.set(s.x,s.y,s.z);l.color.set(s.color);const flutter=.97+Math.sin(time*8.4+s.z)*Math.sin(time*1.1+s.x)*.03;l.intensity=s.power*flutter*(1-blackout*.96);});
-  sky.intensity=.55*(1-blackout*.55);ambient.intensity=.14*(1-blackout*.5);const on=state.flashlight!==false&&!player.hidden;torch.intensity=on?32*(1-threat*.1):0;fill.intensity=on?1.7:.15;if(Number.isFinite(state.brightness))renderer.toneMappingExposure=THREE.MathUtils.clamp(state.brightness,.65,1.8);
+  sky.intensity=.55*(1-blackout*.55);ambient.intensity=.14*(1-blackout*.5);const on=state.flashlight!==false&&!player.hidden;torch.intensity=on?44*(1-threat*.1):0;fill.intensity=on?1.7:.15;if(Number.isFinite(state.brightness))renderer.toneMappingExposure=THREE.MathUtils.clamp(state.brightness,.65,1.8);
   for(const item of dynamic){const completed=state.completed?.includes?.(item.id);item.lamp.material.color.set(completed?'#6aa88c':'#d7ac75');item.lamp.material.emissive.set(completed?'#1b694f':'#b4753c');item.lamp.material.emissiveIntensity=completed?1.1:1.5+Math.sin(time*2.5)*.3;}
   atmo.update?.(dt,time,player,state);
  }

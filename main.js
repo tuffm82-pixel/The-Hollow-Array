@@ -25,7 +25,7 @@ const voice=createVoice();
 const tasks=createTasks({onComplete:id=>completeStation(id),onNoise:()=>{player.noiseTime=gameTime;player.noisyTask=true;audio.cue('alarm');}});
 let world,monster,actors=[],tools=createToolState(),campaign=createCampaign(),mode='home',settingsReturn='home',gameTime=0,subtitleUntil=0,grace=0,stepTime=0,scareCooldown=0,endingTime=0;
 let attack=null,hands=null,equipment=null,lastTransmission='',nextScare=35,finale=null,finaleCompleted=false,finaleVoice=false;
-let lastFrame=performance.now(),lastUi=0,runToggle=false,stamina=1,nearest=null;
+let lastFrame=performance.now(),lastUi=0,runToggle=false,stamina=1,exhausted=false,fireInput=null,nearest=null;
 const player={x:0,z:4,yaw:0,pitch:0,moving:false,running:false,hidden:false,noiseTime:-1,noisyTask:false};
 let enemy={x:0,z:-39,alert:0,lastKnown:{x:0,z:0},seenHiding:false,speed:0};
 const lockers=LOCKERS;
@@ -34,15 +34,16 @@ const keys=new Set(),stick={x:0,y:0,id:null},look={id:null,x:0,y:0};
 document.body.classList.toggle('touch',navigator.maxTouchPoints>0);
 function showScreen(name){for(const id of ['home','hud','pause-screen','settings','ending'])$(id).hidden=id!==name;}
 function say(message,duration=8,spoken=true){$('subtitle').querySelector('p').textContent=message;subtitleUntil=gameTime+duration;$('subtitle').style.opacity=1;if(spoken){lastTransmission=message;voice.speak(message,{speaker:/MIMIC|STATION RADIO/.test(message)?'mimic':'radio'});}}
-function resetInput(){keys.clear();stick.x=stick.y=0;stick.id=null;look.id=null;runToggle=false;tools.held=false;tools.charge=0;pointerFiring=false;$('joystick-knob').style.transform='';$('sprint').setAttribute('aria-pressed','false');}
+function cancelFire(){fireInput=null;tools.held=false;tools.charge=0;}
+function resetInput(){keys.clear();stick.x=stick.y=0;stick.id=null;look.id=null;runToggle=false;cancelFire();$('joystick-knob').style.transform='';$('sprint').setAttribute('aria-pressed','false');}
 function save(){storage.set('hollow-checkpoint',{version:1,chapter:campaign.state.checkpoint});$('continue-game').hidden=false;}
 function applyPreferences(){audio.setMuted(!prefs.sound);voice.setEnabled(prefs.sound);if(world){world.setQuality?.(prefs.quality);}storage.set('hollow-settings',prefs);}
 function home(){mode='home';resetInput();tasks.close();voice.stop();player.hidden=false;attack=null;if(hands)hands.visible=false;$('death-shade').style.opacity=0;document.body.classList.remove('hidden-player','hit');showScreen('home');audio.setThreat(0);$('continue-game').hidden=!storage.get('hollow-checkpoint',null);for(const a of actors)a.view.group.visible=false;$('cliffhanger').hidden=true;}
 function begin(checkpoint=0){
- campaign=createCampaign(checkpoint);gameTime=0;grace=15;scareCooldown=15;stamina=1;endingTime=0;attack=null;nextScare=35;finaleCompleted=false;finaleVoice=false;tasks.close();if(hands)hands.visible=false;$('death-shade').style.opacity=0;
+ campaign=createCampaign(checkpoint);gameTime=0;grace=15;scareCooldown=15;stamina=1;exhausted=false;stepTime=0;endingTime=0;attack=null;nextScare=35;finaleCompleted=false;finaleVoice=false;tasks.close();if(hands)hands.visible=false;$('death-shade').style.opacity=0;
  Object.assign(player,checkpointSpawn(campaign.state.chapter),{pitch:0,hidden:false,moving:false,running:false,noiseTime:-1,noisyTask:false,health:3,hurtUntil:0});
  tools=createToolState(campaign.state.inventory);tools.selected=campaign.state.inventory.at(-1)||'arc';
- for(const a of actors){const data=CREATURES[a.type];Object.assign(a,{x:data.spawn.x,z:data.spawn.z,hp:campaign.state.defeated.includes(a.type)?0:data.health,cycle:0,frozen:0,revealed:0,deathTime:campaign.state.defeated.includes(a.type)?3:0,alert:0,visual:false,seenHiding:false,speed:0,lastNoise:-1,lastKnown:{...data.home}});a.view.group.position.set(a.x,0,a.z);a.view.group.rotation.y=0;a.view.group.visible=false;}
+ for(const a of actors){const data=CREATURES[a.type];Object.assign(a,{x:data.spawn.x,z:data.spawn.z,hp:campaign.state.defeated.includes(a.type)?0:data.health,cycle:0,frozen:0,revealed:0,deathTime:campaign.state.defeated.includes(a.type)?3:0,alert:0,visual:false,seenHiding:false,speed:0,stride:0,lastNoise:-1,lastKnown:{...data.home}});a.view.group.position.set(a.x,0,a.z);a.view.group.rotation.y=0;a.view.group.visible=false;}
  enemy=actors[0];monster=enemy.view;
  resetInput();document.body.classList.remove('hidden-player','hit');mode='playing';showScreen('hud');audio.start();audio.setMuted(!prefs.sound);voice.setEnabled(prefs.sound);voice.resume();voice.unlock();audio.resume();say(campaign.state.message,12);save();updateHUD();
 }
@@ -59,7 +60,7 @@ function updateDeath(dt){
  const shake=prefs.reducedMotion?0:Math.sin(attack.time*37)*(1-p)*.017;
  world.camera.rotation.set((attack.creature?.35:-.3)*Math.sin(p*Math.PI)+fall*.35,yaw+shake,prefs.reducedMotion?0:fall*.8,'YXZ');
  if(hands){hands.visible=attack.creature&&p>.08&&p<.88;hands.position.y=-.1-fall*.45;hands.rotation.x=-Math.sin(p*Math.PI)*.5;}
- if(p>.2&&!attack.grab){audio.cue('grab');attack.grab=true;}if(p>.6&&!attack.drag){audio.cue('drag');attack.drag=true;}$('death-shade').style.opacity=String(clamp((p-.68)/.32,0,1));
+ if(attack.creature&&p>.2&&!attack.grab){audio.cue('grab');attack.grab=true;}if(attack.creature&&p>.6&&!attack.drag){audio.cue('drag');attack.drag=true;}$('death-shade').style.opacity=String(clamp((p-.68)/.32,0,1));
  if(p>=1)finish();
 }
 function use(){
@@ -85,7 +86,7 @@ function completeStation(id,{combatWon=false}={}){
 function hide(){
  if(mode!=='playing'||campaign.state.phase!=='playing')return;
  if(player.hidden){player.hidden=false;for(const a of actors)a.seenHiding=false;document.body.classList.remove('hidden-player');say('You step out. Walk quietly.',3,false);}
- else if(lockers.some(p=>dist(p,player)<2.3)){tasks.close();player.hidden=true;for(const a of actors)a.seenHiding=a.hp>0&&a.visual&&dist(a,player)<8&&lineOfSight(a,player);runToggle=false;document.body.classList.add('hidden-player');say(actors.some(a=>a.seenHiding)?'It saw you get in. This locker will not save you.':'Stay still. Let the footsteps pass.',5,false);}
+ else if(lockers.some(p=>dist(p,player)<2.3)){tasks.close();cancelFire();player.hidden=true;for(const a of actors)a.seenHiding=a.hp>0&&a.visual&&dist(a,player)<8&&lineOfSight(a,player);runToggle=false;document.body.classList.add('hidden-player');say(actors.some(a=>a.seenHiding)?'It saw you get in. This locker will not save you.':'Stay still. Let the footsteps pass.',5,false);}
  else say('Find a tall locker beside the main passage to hide.',4,false);
  $('hide').setAttribute('aria-pressed',String(player.hidden));
 }
@@ -97,7 +98,9 @@ function updateEnemy(dt){
   const intro=STAGES.findIndex(s=>s.combat===a.type);a.view.group.visible=campaign.state.chapter>=intro;if(!a.view.group.visible)continue;
   if(a.hp<=0){a.deathTime+=dt;a.view.update(dt,gameTime,{death:clamp(a.deathTime/2.5,0,1)});continue;}
   a.frozen=Math.max(0,a.frozen-dt);a.revealed=Math.max(0,a.revealed-dt);
-  const distance=dist(a,player),clear=lineOfSight(a,player),sense=perceive(a,player,{yaw:a.view.group.rotation.y,clear,noiseFresh:a.lastNoise!==player.noiseTime});a.visual=sense.visible;a.lastNoise=player.noiseTime;
+  const distance=dist(a,player),eye={x:a.x,y:CREATURES[a.type].weakHeight+.45,z:a.z};
+  const clear=lineOfSight(eye,{...player,y:world.camera.position.y});
+  const sense=perceive(a,player,{yaw:a.view.group.rotation.y,clear,noiseFresh:a.lastNoise!==player.noiseTime});a.visual=sense.visible;a.lastNoise=player.noiseTime;
   if(distance<nearestDistance){nearestActor=a;nearestDistance=distance;}
   if(grace>0){a.view.group.position.set(a.x,0,a.z);a.view.update(dt,gameTime);continue;}
   if(sense.visible){a.alert=7;a.lastKnown=sense.target;}else if(sense.heard){a.alert=4;a.lastKnown=sense.target;}else a.alert=Math.max(0,a.alert-dt);
@@ -106,29 +109,74 @@ function updateEnemy(dt){
   const rush=a.cycle>=1.3&&a.cycle<2.3,recovery=a.cycle>=2.3&&a.cycle<4.9;
   let target=a.alert>0?(rush?a.lungeTarget||a.lastKnown:a.lastKnown):CREATURES[a.type].home;
   const next=nextWaypoint(a,target),dx=next.x-a.x,dz=next.z-a.z,d=Math.hypot(dx,dz);
+  const oldX=a.x,oldZ=a.z;
   a.speed=d>.08?(a.alert>0?(rush?CREATURES[a.type].speed*1.75:recovery?.35:.7):.8):0;if(a.frozen>0)a.speed*=.12;
   if(d>.08){const step=Math.min(d,a.speed*dt),nx=a.x+dx/d*step,nz=a.z+dz/d*step;if(walkable(nx,a.z))a.x=nx;if(walkable(a.x,nz))a.z=nz;const angle=Math.atan2(-dx,-dz),diff=Math.atan2(Math.sin(angle-a.view.group.rotation.y),Math.cos(angle-a.view.group.rotation.y));a.view.group.rotation.y+=diff*Math.min(1,dt*5);}
+  const travel=Math.hypot(a.x-oldX,a.z-oldZ);
+  a.speed=dt>0?travel/dt:0;
+  a.stride+=travel;
+  if(a.stride>= (rush?1.05:.62)){
+   a.stride=0;
+   if(distance<16){
+    const pan=((a.x-player.x)*Math.cos(player.yaw)-(a.z-player.z)*Math.sin(player.yaw))/Math.max(1,distance);
+    audio.footstep({surface:'stone',weight:1.5,volume:(1-distance/16)**2*(clear?.8:.38),pan,muffled:!clear});
+   }
+  }
   a.view.group.position.set(a.x,0,a.z);a.view.update(dt,gameTime,{speed:a.speed,attack:rush?clamp((a.cycle-1.3),.001,.999):0,stun:a.frozen>0?1:0,vulnerable:isVulnerable(a)});
   if(distance<1.05&&rush&&a.frozen<=0&&clear&&(!player.hidden||a.seenHiding)&&gameTime>player.hurtUntil){player.health--;player.hurtUntil=gameTime+2;audio.cue('grab');if(player.health<=0){enemy=a;monster=a.view;caught(`${CREATURES[a.type].name} takes hold of your expedition suit.`);return 1;}say('Hit. Dodge sideways during the wind-up, then counterattack.',4,false);}
   threat=Math.max(threat,a.visual?clamp(1-distance/24,.1,1):a.alert>0?.2:.04);
  }
  if(nearestActor){enemy=nearestActor;monster=nearestActor.view;}return threat;
 }
-function selectTool(id){if(mode!=='playing'||!tools.inventory.includes(id))return;chooseTool(tools,id);audio.cue('interact');updateHUD();}
+function selectTool(id){if(mode!=='playing'||tasks.active||id===tools.selected||!tools.inventory.includes(id))return;cancelFire();chooseTool(tools,id);audio.cue('interact');updateHUD();}
+function beginFire(input){
+ if(fireInput!==null||mode!=='playing'||campaign.state.phase!=='playing'||tasks.active||player.hidden||!tools.inventory.includes(tools.selected))return false;
+ fireInput=input;tools.held=true;return true;
+}
+function endFire(input,shouldFire){
+ if(fireInput!==input)return;
+ if(shouldFire){fireInput=null;releaseTool();}else cancelFire();
+}
 function releaseTool(){
- if(mode!=='playing'||campaign.state.phase!=='playing')return;
+ if(mode!=='playing'||campaign.state.phase!=='playing'||tasks.active||player.hidden){cancelFire();return;}
  let target=null,best=Infinity,options={};
- for(const a of actors){if(a.hp<=0||!a.view.group.visible)continue;const dx=a.x-player.x,dz=a.z-player.z,dy=CREATURES[a.type].weakHeight-world.camera.position.y,distance=Math.hypot(dx,dy,dz),cp=Math.cos(player.pitch),dot=(dx*(-Math.sin(player.yaw)*cp)+dy*Math.sin(player.pitch)+dz*(-Math.cos(player.yaw)*cp))/distance,aimError=Math.acos(clamp(dot,-1,1));if(aimError<best){best=aimError;target=a;options={visible:lineOfSight(player,a),distance,aimError};}}
- const result=fireTool(tools,target,options);say(result.message,5,false);if(result.used){audio.cue(result.ok?'interact':'alarm');player.noiseTime=gameTime;player.noisyTask=true;if(target&&options.visible){target.alert=7;target.lastKnown={x:player.x,z:player.z};}}
+ const origin=world.camera.position;
+ for(const a of actors){
+  if(a.hp<=0||!a.view.group.visible)continue;
+  const weak={x:a.x,y:CREATURES[a.type].weakHeight,z:a.z};
+  if(!lineOfSight(origin,weak))continue;
+  const dx=weak.x-origin.x,dz=weak.z-origin.z,dy=weak.y-origin.y,distance=Math.hypot(dx,dy,dz);
+  const cp=Math.cos(player.pitch),dot=distance>0?(dx*(-Math.sin(player.yaw)*cp)+dy*Math.sin(player.pitch)+dz*(-Math.cos(player.yaw)*cp))/distance:1;
+  const aimError=Math.acos(clamp(dot,-1,1));
+  if(aimError<best){best=aimError;target=a;options={visible:true,distance,aimError};}
+ }
+ const result=fireTool(tools,target,options);say(result.message,5,false);if(result.used){audio.cue(tools.selected);player.noiseTime=gameTime;player.noisyTask=true;if(target&&options.visible){target.alert=7;target.lastKnown={x:player.x,z:player.z};}}
  if(result.event==='defeat'){target.deathTime=0;const stage=STAGES[campaign.state.chapter];if(stage.combat===target.type)completeStation(stage.id,{combatWon:true});}updateHUD();
 }
 function move(dt){
  let x=stick.x+(keys.has('KeyD')?1:0)-(keys.has('KeyA')?1:0),y=stick.y+(keys.has('KeyS')?1:0)-(keys.has('KeyW')?1:0);
- const len=Math.hypot(x,y);if(len>1){x/=len;y/=len;}player.moving=Math.hypot(x,y)>.1&&!player.hidden;
- player.running=player.moving&&(runToggle||keys.has('ShiftLeft')||keys.has('ShiftRight'))&&stamina>.02;
- stamina=clamp(stamina+(player.running?-.14:.12)*dt,0,1);if(stamina===0)runToggle=false;
- const speed=player.running?4.1:2.45;
- if(player.moving){const dx=(Math.cos(player.yaw)*x+Math.sin(player.yaw)*y)*speed*dt,dz=(-Math.sin(player.yaw)*x+Math.cos(player.yaw)*y)*speed*dt;if(walkable(player.x+dx,player.z))player.x+=dx;if(walkable(player.x,player.z+dz))player.z+=dz;stepTime-=dt;if(stepTime<=0){audio.cue('step');player.noiseTime=gameTime;player.noisyTask=false;stepTime=player.running?.33:.54;}}
+ const len=Math.hypot(x,y);if(len>1){x/=len;y/=len;}
+ if(exhausted&&stamina>=.23)exhausted=false;
+ const sprinting=!exhausted&&(runToggle||keys.has('ShiftLeft')||keys.has('ShiftRight'));
+ const speed=sprinting?4.1:2.45,oldX=player.x,oldZ=player.z;
+ if(len>.1&&!player.hidden){
+  const dx=(Math.cos(player.yaw)*x+Math.sin(player.yaw)*y)*speed*dt;
+  const dz=(-Math.sin(player.yaw)*x+Math.cos(player.yaw)*y)*speed*dt;
+  if(walkable(player.x+dx,player.z))player.x+=dx;
+  if(walkable(player.x,player.z+dz))player.z+=dz;
+ }
+ const travel=Math.hypot(player.x-oldX,player.z-oldZ);
+ player.moving=travel>.0001;player.running=player.moving&&sprinting;
+ stamina=clamp(stamina+(player.running?-.14:.12)*dt,0,1);
+ if(stamina===0){exhausted=true;runToggle=false;}
+ if(player.moving){
+  stepTime-=travel;
+  if(stepTime<=0){
+   const surface=Math.abs(player.x)<8&&Math.abs(player.z)<8?'wood':player.z<-42&&player.z>-56&&player.x<-3?'stone':'tile';
+   audio.footstep({surface,weight:player.running?1.2:1,volume:player.running?1:.67});
+   player.noiseTime=gameTime;player.noisyTask=false;stepTime=player.running?1.28:1.15;
+  }
+ }
  if(keys.has('ArrowLeft'))player.yaw+=dt*1.65;if(keys.has('ArrowRight'))player.yaw-=dt*1.65;
  if(keys.has('ArrowUp'))player.pitch=clamp(player.pitch+dt,-1.2,1.2);if(keys.has('ArrowDown'))player.pitch=clamp(player.pitch-dt,-1.2,1.2);
  const bob=prefs.reducedMotion?0:player.moving?Math.sin(gameTime*(player.running?13:9))*.025:Math.sin(gameTime*1.5)*.004;
@@ -154,7 +202,7 @@ function frame(now){
   gameTime+=dt;updateTools(tools,dt);grace=Math.max(0,grace-dt);scareCooldown-=dt;
   if(campaign.state.phase==='playing'){
    move(dt);if(tasks.active){const station=STATIONS.find(p=>p.id===tasks.id);if(!station||dist(station.position,player)>3)tasks.close();else tasks.update(dt);}
-   const event=campaign.update(dt,player);if(event){say(event.message,12);if(event.cue)audio.cue(event.cue);}
+   const event=campaign.update(dt,player);if(event){say(event.message,12);if(event.cue&&event.event!=='death')audio.cue(event.cue);}
    if(campaign.state.phase==='playing'){const proximity=updateEnemy(dt);audio.setThreat(Math.max(proximity,campaign.state.threat*.5));document.documentElement.style.setProperty('--danger',proximity.toFixed(2));}
    else if(campaign.state.phase==='dead'&&!attack)startDeath(false);
    if(gameTime>nextScare&&campaign.state.chapter>=2){audio.cue('whisper');nextScare=gameTime+45+campaign.state.chapter*7;}
@@ -179,8 +227,12 @@ function bind(){
 const shade=document.createElement('div');shade.id='death-shade';document.body.append(shade);
 const combatHud=document.createElement('div');combatHud.id='combat-hud';combatHud.innerHTML='<div id="health">HEALTH ●●●</div><div id="creature-status"></div><div id="tool-bar"><button data-tool="arc">ARC</button><button data-tool="sonar">ECHO</button><button data-tool="cryo">CRYO</button></div><button id="fire" aria-label="Use selected tool">HOLD / FIRE<span class="charge-track"><i id="tool-charge"></i></span></button>';$('hud').append(combatHud);
 for(const b of combatHud.querySelectorAll('[data-tool]'))b.onclick=()=>selectTool(b.dataset.tool);
-let pointerFiring=false;const fireButton=$('fire');fireButton.onpointerdown=e=>{if(mode!=='playing'||!tools.inventory.includes(tools.selected)||tasks.active)return;pointerFiring=true;tools.held=true;fireButton.setPointerCapture(e.pointerId);e.preventDefault();};fireButton.onpointerup=()=>{if(pointerFiring){pointerFiring=false;releaseTool();}};fireButton.onpointercancel=()=>{pointerFiring=false;tools.held=false;tools.charge=0;};fireButton.onlostpointercapture=()=>{if(pointerFiring){pointerFiring=false;tools.held=false;tools.charge=0;}};
-addEventListener('keydown',e=>{if(mode!=='playing'||tasks.active)return;if(e.code==='KeyF'&&!e.repeat){tools.held=true;e.preventDefault();}if(e.code==='Digit1')selectTool('arc');if(e.code==='Digit2')selectTool('sonar');if(e.code==='Digit3')selectTool('cryo');});addEventListener('keyup',e=>{if(e.code==='KeyF'&&mode==='playing')releaseTool();});
+const fireButton=$('fire');
+fireButton.onpointerdown=e=>{if(e.button!==0||!beginFire(e.pointerId))return;fireButton.setPointerCapture(e.pointerId);e.preventDefault();};
+fireButton.onpointerup=e=>endFire(e.pointerId,true);
+fireButton.onpointercancel=fireButton.onlostpointercapture=e=>endFire(e.pointerId,false);
+addEventListener('keydown',e=>{if(mode!=='playing'||tasks.active)return;if(e.code==='KeyF'&&!e.repeat&&beginFire('keyboard'))e.preventDefault();if(e.code==='Digit1')selectTool('arc');if(e.code==='Digit2')selectTool('sonar');if(e.code==='Digit3')selectTool('cryo');});
+addEventListener('keyup',e=>{if(e.code==='KeyF')endFire('keyboard',true);});
 const cliff=document.createElement('div');cliff.id='cliffhanger';cliff.hidden=true;cliff.textContent='CHAPTER TWO — THE UNDERSKY · TO BE CONTINUED';$('ending').append(cliff);
 const skip=document.createElement('button');skip.id='skip-film';skip.className='secondary';skip.textContent='SKIP DESCENT';skip.hidden=true;skip.onclick=()=>finale?.skip();document.body.append(skip);
 const replay=document.createElement('button');replay.id='radio-replay';replay.textContent='↻ REPLAY RADIO';replay.onclick=()=>{voice.unlock();voice.speak(lastTransmission||campaign.state.message,{interrupt:true});subtitleUntil=gameTime+12;};$('hud').append(replay);

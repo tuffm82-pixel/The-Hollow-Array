@@ -5,21 +5,28 @@ export function createAudio() {
   let muted=false, threat=0, lastBeat=0, lastKnock=0, started=false, disposed=false;
   const continuous=[];
   function smooth(param,value,seconds=.18) { if(context) param.setTargetAtTime(value,context.currentTime,seconds); }
-  function noise(duration, volume, frequency, resonance=1, delay=0) {
+  function connectCue(gain,pan) {
+    if(!pan||!context.createStereoPanner){gain.connect(master);return null;}
+    const panner=context.createStereoPanner();
+    panner.pan.value=Math.max(-1,Math.min(1,pan));
+    gain.connect(panner).connect(master);
+    return panner;
+  }
+  function noise(duration, volume, frequency, resonance=1, delay=0, pan=0) {
     if(!context || context.state!=='running')return;
     const source=context.createBufferSource(), filter=context.createBiquadFilter(), gain=context.createGain();
     source.buffer=noiseBuffer;source.loop=true; filter.type='bandpass';filter.frequency.value=frequency;filter.Q.value=resonance;
     const now=context.currentTime+delay;gain.gain.setValueAtTime(.0001,now);gain.gain.exponentialRampToValueAtTime(Math.max(.0002,volume),now+.025);gain.gain.exponentialRampToValueAtTime(.0001,now+duration);
-    source.connect(filter).connect(gain).connect(master);source.start(now);source.stop(now+duration+.02);
-    source.onended=()=>{source.disconnect();filter.disconnect();gain.disconnect();};
+    source.connect(filter).connect(gain);const panner=connectCue(gain,pan);source.start(now);source.stop(now+duration+.02);
+    source.onended=()=>{source.disconnect();filter.disconnect();gain.disconnect();panner?.disconnect();};
   }
-  function tone(frequency,endFrequency,duration,volume,type='sine',delay=0) {
+  function tone(frequency,endFrequency,duration,volume,type='sine',delay=0,pan=0) {
     if(!context || context.state!=='running')return;
     const oscillator=context.createOscillator(),gain=context.createGain(),now=context.currentTime+delay;
     oscillator.type=type;oscillator.frequency.setValueAtTime(frequency,now);oscillator.frequency.exponentialRampToValueAtTime(Math.max(10,endFrequency),now+duration);
     gain.gain.setValueAtTime(.0001,now);gain.gain.exponentialRampToValueAtTime(Math.max(.0002,volume),now+.012);gain.gain.exponentialRampToValueAtTime(.0001,now+duration);
-    oscillator.connect(gain).connect(master);oscillator.start(now);oscillator.stop(now+duration+.02);
-    oscillator.onended=()=>{oscillator.disconnect();gain.disconnect();};
+    oscillator.connect(gain);const panner=connectCue(gain,pan);oscillator.start(now);oscillator.stop(now+duration+.02);
+    oscillator.onended=()=>{oscillator.disconnect();gain.disconnect();panner?.disconnect();};
   }
   async function start() {
     if(disposed)return;
@@ -67,6 +74,9 @@ export function createAudio() {
     switch(name) {
       case 'interact': tone(720,390,.13,.11,'triangle');noise(.12,.06,1200);break;
       case 'step': noise(.17,.065,160,1);tone(90,45,.09,.045);break;
+      case 'arc': noise(.19,.22,1900,.8);tone(330,62,.17,.13,'triangle');break;
+      case 'sonar': tone(502,489,.6,.14,'sine');tone(757,729,.43,.055,'sine',.04);break;
+      case 'cryo': noise(.43,.18,1120,.65);noise(.23,.09,410,1.4,.08);break;
       case 'alarm': [0,.4,.8].forEach(delay=>tone(330,310,.29,.12,'triangle',delay));break;
       case 'scare': noise(1.3,.34,750,.8);tone(92,27,2.2,.3,'sawtooth');tone(441,129,1.4,.13,'triangle',.08);break;
       case 'death': noise(1.8,.34,480,.6);tone(70,19,2.8,.34,'sawtooth');tone(630,41,1.2,.1,'triangle');break;
@@ -77,8 +87,17 @@ export function createAudio() {
       default: noise(.5,.08,220);
     }
   }
+  function footstep({surface='tile',weight=1,volume=1,pan=0,muffled=false}={}){
+    if(!started||muted||disposed||volume<.015)return;
+    const pitch=.94+Math.random()*.12;
+    const surfaceFrequency={wood:520,stone:290,tile:880}[surface]??520;
+    const cutoff=muffled?.48:1;
+    tone(95*pitch/weight,44*pitch/weight,.12,.07*weight*volume,'sine',0,pan);
+    noise(.14,.085*volume,surfaceFrequency*pitch*cutoff,.75,0,pan);
+    if(!muffled)noise(.085,.031*volume,surfaceFrequency*2.3*pitch,1.5,.048,pan);
+  }
   return {
-    start,cue,
+    start,cue,footstep,
     setThreat(value){threat=Math.max(0,Math.min(1,Number.isFinite(value)?value:0));if(ambience)smooth(ambience.gain,.13+threat*.07);},
     setMuted(value){muted=Boolean(value);if(master)smooth(master.gain,muted?0:.45,.045);},
     suspend(){return context?.suspend();},

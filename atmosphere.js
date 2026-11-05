@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {ZONES} from './layout.js';
 
 // All surface maps are generated locally. They contain no downloaded imagery.
 const textureSets=new Map();
@@ -61,7 +62,26 @@ export function createAtmosphere(scene,{bounds={minX:-46,maxX:48,minZ:-84,maxZ:9
  const outdoors=(x,z)=>!((x>-10&&x<10&&z>-10&&z<10)||(x>-5&&x<5&&z>-69&&z<10)||(x>-49&&x<51&&z>-12&&z<12)||(x>-23&&x<0&&z>-31&&z<-11)||(x>0&&x<25&&z>-44&&z<-24)||(x>-29&&x<0&&z>-59&&z<-39)||(x>-18&&x<18&&z>-87&&z<-63));
  // A low, snow-covered ground plane gives the window views real depth instead
  // of empty black space. Raised drifts are confined to exterior clearances.
- const groundGeo=new THREE.PlaneGeometry(180,180,36,36);groundGeo.rotateX(-Math.PI/2);groundGeo.translate(0,-.28,-35);const gp=groundGeo.attributes.position,gc=[];for(let i=0;i<gp.count;i++){const x=gp.getX(i),z=gp.getZ(i),n=noise(x*.09,z*.09,534),outside=outdoors(x,z);gp.setY(i,outside?-.26+n*.16:-.28);const c=.36+n*.15;gc.push(c*.84,c*.93,c);}groundGeo.setAttribute('color',new THREE.Float32BufferAttribute(gc,3));groundGeo.computeVertexNormals();add(groundGeo,new THREE.MeshStandardMaterial({color:'#c9d3d6',vertexColors:true,roughness:1}));
+ const gridX=new Set(),gridZ=new Set();
+ for(let i=0;i<=24;i++){gridX.add(-90+i*7.5);gridZ.add(-125+i*7.5);}
+ for(const zone of ZONES){gridX.add(zone.minX);gridX.add(zone.maxX);gridZ.add(zone.minZ);gridZ.add(zone.maxZ);}
+ const xs=[...gridX].sort((a,b)=>a-b),zs=[...gridZ].sort((a,b)=>a-b);
+ const groundVertices=[],groundColors=[],groundIndices=[];
+ for(const z of zs)for(const x of xs){
+  const drift=noise(x*.09,z*.09,534),color=.36+drift*.15;
+  groundVertices.push(x,-.26+drift*.16,z);groundColors.push(color*.84,color*.93,color);
+ }
+ for(let row=0;row<zs.length-1;row++)for(let col=0;col<xs.length-1;col++){
+  const x=(xs[col]+xs[col+1])/2,z=(zs[row]+zs[row+1])/2;
+  if(ZONES.some(zone=>x>zone.minX&&x<zone.maxX&&z>zone.minZ&&z<zone.maxZ))continue;
+  const a=row*xs.length+col,b=a+xs.length;
+  groundIndices.push(a,b,a+1,a+1,b,b+1);
+ }
+ const groundGeo=new THREE.BufferGeometry();
+ groundGeo.setAttribute('position',new THREE.Float32BufferAttribute(groundVertices,3));
+ groundGeo.setAttribute('color',new THREE.Float32BufferAttribute(groundColors,3));
+ groundGeo.setIndex(groundIndices);groundGeo.computeVertexNormals();
+ add(groundGeo,new THREE.MeshStandardMaterial({color:'#c9d3d6',vertexColors:true,roughness:1}));
  const trees=[];for(let attempts=0;trees.length<100&&attempts<2000;attempts++){const x=(rand()-.5)*154,z=-38+(rand()-.5)*145;if(outdoors(x,z))trees.push({x,z,scale:.6+rand()*.9});}
  const trunk=new THREE.InstancedMesh(ownGeo(new THREE.CylinderGeometry(.13,.23,5,5)),ownMat(new THREE.MeshStandardMaterial({color:'#1c211f',roughness:1})),trees.length),canopy=new THREE.InstancedMesh(ownGeo(new THREE.ConeGeometry(1.8,5.5,7)),ownMat(new THREE.MeshStandardMaterial({color:'#101e1e',roughness:1})),trees.length*3);group.add(trunk,canopy);
  trees.forEach((tree,i)=>{tmp.position.set(tree.x,2.5*tree.scale-1,tree.z);tmp.rotation.set(0,rand()*6,0);tmp.scale.setScalar(tree.scale);tmp.updateMatrix();trunk.setMatrixAt(i,tmp.matrix);for(let j=0;j<3;j++){tmp.position.y=(4.3+j*1.7)*tree.scale-1;tmp.scale.setScalar(tree.scale*(1-j*.18));tmp.updateMatrix();canopy.setMatrixAt(i*3+j,tmp.matrix);}});
