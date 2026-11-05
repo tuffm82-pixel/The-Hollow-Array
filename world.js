@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
-import {ZONES,STATIONS,HIDE_SPOTS} from './layout.js';
+import {ZONES,STATIONS,HIDE_SPOTS,ARENAS} from './layout.js';
 import {createAtmosphere,makeWeatheredMaterial} from './atmosphere.js';
 
 const bounds={minX:-46,maxX:48,minZ:-84,maxZ:9};
@@ -8,13 +8,15 @@ export const SOLID_PROPS=Object.freeze([
  {x:4,z:4,halfX:1.7,halfZ:.65},{x:-5.6,z:3,halfX:.9,halfZ:1.65},{x:-5.6,z:-3.8,halfX:.9,halfZ:1.65},
  {x:6.5,z:-5.4,halfX:.7,halfZ:1.75,height:3.2},
  {x:-41,z:-5.5,halfX:1.8,halfZ:1.5},{x:-44,z:5.8,halfX:.7,halfZ:1.4},
+ {x:-40,z:-4.1,halfX:.7,halfZ:.45,height:2.1},
+ {x:-15,z:-46,halfX:.85,halfZ:.35,height:2.15},
  ...[39,44].flatMap(x=>[-5.6,5.6].map(z=>({x,z,halfX:1.2,halfZ:.7}))),
  ...[-17.6,-12,-6.4].flatMap(x=>[-26.5,-15.5].map(z=>({x,z,halfX:1.5,halfZ:.5}))),
  ...[7,16.5].map(x=>({x,z:-38.9,halfX:2,halfZ:.65})),
  ...[-20,-11].flatMap(x=>[-53.6,-44.4].map(z=>({x,z,halfX:2.7,halfZ:.7}))),
- {x:5,z:-75.5,halfX:1.75,halfZ:1.75},
+ {x:5,z:-75.5,halfX:2.2,halfZ:2.2,height:2.65},
  ...HIDE_SPOTS.map(p=>({x:p.x,z:p.z,halfX:Math.abs(p.x)>8?.3:.4,halfZ:Math.abs(p.x)>8?.4:.3,height:2.4})),
- ...STATIONS.filter(s=>!['hound','widow','cantor'].includes(s.id)).map(s=>({x:s.position.x,z:s.position.z-.8,halfX:.55,halfZ:.27})),
+ ...STATIONS.map(s=>({x:s.position.x,z:s.position.z-.8,halfX:.55,halfZ:.27})),
 ]);
 const height=z=>z.minZ<=-66?3.6:z.minX===-8&&z.maxX===8?5.2:3.9;
 const near=(a,b)=>Math.abs(a-b)<.01;
@@ -71,7 +73,7 @@ export function createWorld(canvas,{quality='high'}={}){
  const materials={concrete:makeWeatheredMaterial('concrete'),wood:makeWeatheredMaterial('wood'),metal:makeWeatheredMaterial('metal'),stone:makeWeatheredMaterial('stone'),tile:makeWeatheredMaterial('tile')};
  Object.assign(materials,{dark:new THREE.MeshStandardMaterial({color:'#0b1318',roughness:.82}),rust:new THREE.MeshStandardMaterial({color:'#6f4c35',roughness:.91,metalness:.25}),fabric:new THREE.MeshStandardMaterial({color:'#4b554d',roughness:.97}),leaf:new THREE.MeshStandardMaterial({color:'#344637',roughness:.93,side:THREE.DoubleSide}),paper:new THREE.MeshStandardMaterial({color:'#aaa28a',roughness:1}),glass:new THREE.MeshStandardMaterial({color:'#16353e',emissive:'#0b2335',emissiveIntensity:.35,metalness:.45,roughness:.2,transparent:true,opacity:.38,depthWrite:false,side:THREE.DoubleSide}),amber:new THREE.MeshStandardMaterial({color:'#edc78e',emissive:'#ed9d55',emissiveIntensity:2}),cyan:new THREE.MeshStandardMaterial({color:'#9dcace',emissive:'#75aebf',emissiveIntensity:2}),red:new THREE.MeshStandardMaterial({color:'#a54d3d',emissive:'#8c2c22',emissiveIntensity:.7}),black:new THREE.MeshStandardMaterial({color:'#020607',roughness:.58})});
  materials.wet=new THREE.MeshStandardMaterial({color:'#142222',roughness:.19,metalness:.25,transparent:true,opacity:.5,depthWrite:false});
- const batches=new Map(),dynamic=[],textures=[];
+ const batches=new Map(),dynamic=[],textures=[],hazardViews={};
  function append(name,g,pos,rot=[0,0,0]){const m=new THREE.Matrix4().compose(new THREE.Vector3(...pos),new THREE.Quaternion().setFromEuler(new THREE.Euler(...rot)),new THREE.Vector3(1,1,1));g.applyMatrix4(m);if(!batches.has(name))batches.set(name,[]);batches.get(name).push(g);}
  const box=(name,x,y,z,w,h,d,rot=[0,0,0])=>{const g=new THREE.BoxGeometry(w,h,d),uv=g.attributes.uv;for(let i=0;i<uv.count;i++){const face=Math.floor(i/4),sx=(face<2?d:w)/2,sy=(face===2||face===3?d:h)/2;uv.setXY(i,uv.getX(i)*Math.max(.1,sx),uv.getY(i)*Math.max(.1,sy));}append(name,g,[x,y,z],rot);};
  const cylinder=(name,x,y,z,top,bottom,h,rot=[0,0,0],n=14)=>append(name,new THREE.CylinderGeometry(top,bottom,h,n),[x,y,z],rot);
@@ -112,6 +114,7 @@ export function createWorld(canvas,{quality='high'}={}){
  for(const [x,z,ry]of doorFrames){const wide=z===-66?5:ry?3:6;for(const side of [-1,1]){const dx=Math.cos(ry)*side*(wide/2-.05),dz=Math.sin(ry)*side*(wide/2-.05);box('metal',x+dx,1.5,z+dz,.18,3,.18);}box('metal',x,3,z,wide,.18,.26,[0,ry,0]);}
  // Lodge: damp reception, fireplace, abandoned furniture and weather station charts.
  box('wood',4,.5,4,3.4,1,1.3);box('black',4,1.05,4,3.55,.10,1.45);box('metal',4.7,1.28,4,.7,.38,.22,[.12,0,0]);box('black',4.7,1.31,3.87,.54,.24,.018);
+ box('red',3.6,1.20,3.84,.62,.25,.40);box('dark',3.6,1.34,3.68,.25,.05,.07);
  for(const z of [3,-3.8]){box('fabric',-5.6,.42,z,1.8,.5,3.3);box('wood',-6.38,.9,z,.22,1.2,3.5);for(const dz of [-1.55,1.55])box('wood',-5.6,.68,z+dz,1.8,.7,.18);for(let i=0;i<3;i++)box('fabric',-5.55,.72,z-.95+i*.9,1.45,.16,.8,[0,.02*i,0]);}
  box('stone',6.5,1.6,-5.4,1.4,3.2,3.5);box('black',5.76,.85,-5.4,.05,1.3,2.2);for(let i=0;i<4;i++)cylinder('wood',5.8,.25+i*.09,-5.85+i*.3,.07,.08,1.1,[Math.PI/2,0,.2]);
  sign('Mount Orison','Meteorological array / last shift 1968',0,3.7,7.85,Math.PI,4.5,1.15);sign('Staff only','Records  /  Calibration  /  Telescope',0,3.35,-7.86,0,4,.8);sign('Engineering','West service wing',-7.85,3.4,0,Math.PI/2,3,.7);sign('Medical','East dormitory wing',7.85,3.4,0,-Math.PI/2,3,.7);
@@ -149,7 +152,21 @@ export function createWorld(canvas,{quality='high'}={}){
  // Shelter cupboards use the same locations as gameplay.
  for(const p of HIDE_SPOTS){const x=p.x??p.position?.x,z=p.z??p.position?.z;if(!Number.isFinite(x)||!Number.isFinite(z))continue;const ry=Math.abs(x)>8?Math.PI/2:0;box('wood',x,1.2,z,.8,2.4,.6,[0,ry,0]);box('metal',x+.22,1.1,z+.32,.04,.25,.025);sign('Shelter','Keep still',x,1.7,z+.325,0,.62,.25);}
  // Interactive stations: a readable lamp and tool tray marks each exact objective.
- const stationKeys=new Set();for(const station of STATIONS){const p=station.position??station;if(!Number.isFinite(p.x)||!Number.isFinite(p.z)||['hound','widow','cantor'].includes(station.id))continue;const key=`${p.x},${p.z}`;if(stationKeys.has(key))continue;stationKeys.add(key);box('metal',p.x,.48,p.z-.8,1.1,.96,.54);box('black',p.x,.99,p.z-.8,1.16,.08,.58);box('cyan',p.x,.995,p.z-.60,.62,.02,.13);const g=new THREE.Group();g.position.set(p.x,0,p.z-.8);const lamp=new THREE.Mesh(new THREE.SphereGeometry(.055,8,6),materials.amber.clone());lamp.position.set(.37,1.08,.12);g.add(lamp);scene.add(g);dynamic.push({id:station.id,lamp});}
+ const stationKeys=new Set();for(const station of STATIONS){const p=station.position??station;if(!Number.isFinite(p.x)||!Number.isFinite(p.z))continue;const key=`${p.x},${p.z}`;if(stationKeys.has(key))continue;stationKeys.add(key);box('metal',p.x,.48,p.z-.8,1.1,.96,.54);box('black',p.x,.99,p.z-.8,1.16,.08,.58);box('cyan',p.x,.995,p.z-.60,.62,.02,.13);const g=new THREE.Group();g.position.set(p.x,0,p.z-.8);const lamp=new THREE.Mesh(new THREE.SphereGeometry(.055,8,6),materials.amber.clone());lamp.position.set(.37,1.08,.12);g.add(lamp);scene.add(g);dynamic.push({id:station.id,lamp});}
+ // Each room device has a physical panel and a marked floor area.
+ for(const [type,arena] of Object.entries(ARENAS)){
+  const {panel,hazard,radius,kind}=arena;
+  sign(arena.label,'USE PANEL / WATCH MARKED AREA',panel.x,1.46,panel.z-.82,0,1.7,.44);
+  const geometry=kind==='beam'?new THREE.PlaneGeometry(3.3,radius*2):new THREE.RingGeometry(radius-.13,radius,40);
+  const material=new THREE.MeshBasicMaterial({color:'#c4a777',transparent:true,opacity:.62,depthWrite:false});
+  const marker=new THREE.Mesh(geometry,material);marker.rotation.x=-Math.PI/2;marker.position.set(hazard.x,.031,hazard.z);marker.visible=false;scene.add(marker);
+  hazardViews[type]=marker;
+ }
+ box('metal',-40,1.05,-4.1,1.4,2.1,.9);
+ box('metal',-15,1.075,-46,1.7,2.15,.7);
+ for(let i=-3;i<=3;i++)box('metal',-39+i*.35,.026,-2,.08,.052,2.7);
+ for(const x of [-14.6,-9.4])box('metal',x,3.15,-49,.10,.10,4.8);
+ box('metal',0,3.55,-77,3.3,.23,.35);box('cyan',0,3.41,-77,2.9,.025,.19);
  // Papers, abandoned charts and cables are visual clues without invisible colliders.
  for(let i=0;i<35;i++){const x=Math.sin(i*13.3)*2,z=-6-i*1.55;if(z<-65)break;box('paper',x,.025,z,.25+(i%3)*.05,.012,.36,[0,i*.63,0]);}
  // Service detail is material-batched with the architecture. Everything added
@@ -201,6 +218,13 @@ export function createWorld(canvas,{quality='high'}={}){
   lightPool.forEach((l,i)=>{const s=nearest[i];l.position.set(s.x,s.y,s.z);l.color.set(s.color);const flutter=.97+Math.sin(time*8.4+s.z)*Math.sin(time*1.1+s.x)*.03;l.intensity=s.power*flutter*(1-blackout*.96);});
   sky.intensity=.55*(1-blackout*.55);ambient.intensity=.14*(1-blackout*.5);const on=state.flashlight!==false&&!player.hidden;torch.intensity=on?44*(1-threat*.1):0;fill.intensity=on?1.7:.15;if(Number.isFinite(state.brightness))renderer.toneMappingExposure=THREE.MathUtils.clamp(state.brightness,.65,1.8);
   for(const item of dynamic){const completed=state.completed?.includes?.(item.id);item.lamp.material.color.set(completed?'#6aa88c':'#d7ac75');item.lamp.material.emissive.set(completed?'#1b694f':'#b4753c');item.lamp.material.emissiveIntensity=completed?1.1:1.5+Math.sin(time*2.5)*.3;}
+  for(const [type,marker] of Object.entries(hazardViews)){
+   marker.visible=state.arenaType===type;
+   if(!marker.visible)continue;
+   const armed=state.arenaArmed>0;
+   marker.material.color.set(armed?type==='graft'?'#ffc657':'#9de5f0':state.arenaCooldown>0?'#7b95a1':'#a28a58');
+   marker.material.opacity=type==='cantor'?(armed?.28:.09):(armed?.88:.55);
+  }
   atmo.update?.(dt,time,player,state);
  }
  function dispose(){atmo.dispose?.();const geoms=new Set(),mats=new Set(),maps=new Set(textures);scene.traverse(o=>{if(o.geometry)geoms.add(o.geometry);if(o.material)for(const m of Array.isArray(o.material)?o.material:[o.material])mats.add(m);});for(const m of mats)for(const value of Object.values(m))if(value?.isTexture)maps.add(value);maps.forEach(t=>t.dispose());geoms.forEach(g=>g.dispose());mats.forEach(m=>m.dispose());renderer.dispose();}

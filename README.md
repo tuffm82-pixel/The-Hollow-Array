@@ -18,10 +18,10 @@ On iPad, open the browser link in Safari, turn sideways and tap **ENTER STATION*
 | Run | RUN toggle | Shift |
 | Hide near a locker | HIDE | H |
 | Switch tool | ARC / ECHO / CRYO | 1 / 2 / 3 |
-| Use selected tool | Hold FIRE, then release | Hold F, then release |
+| Use selected tool | Tap FIRE | Click or press F |
 | Pause | Ⅱ | Escape |
 
-The **Arc Spool** charges while FIRE is held. Wait for an enemy's opening before releasing it. **ECHO** is the Resonance Fork; it exposes hidden tissue. **CRYO** is the Cryo Lantern; it freezes a creature briefly. Tools are found through the campaign, so their buttons start locked.
+Aim at the creature’s body and tap **FIRE**. Use the marked room equipment to open its armour first. **ECHO** is the Resonance Fork; it exposes hidden tissue. **CRYO** is the Cryo Lantern; it freezes a creature briefly. Tools are found through the campaign, so their buttons start locked.
 
 ## Chapter One
 

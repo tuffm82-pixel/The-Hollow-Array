@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {clone} from 'three/addons/utils/SkeletonUtils.js';
 import {createMonster as createFallback} from './creatures.js';
+import {CREATURES} from './layout.js';
 
 export const CREATURE_ASSETS={
  runner:new URL('./assets/creatures/runner.glb',import.meta.url).href,
@@ -28,7 +29,8 @@ export function animatedCreature(gltf){
 // until the real GLB is ready, and also when a network load fails.
 export function createMonster(type){
  const id={graft:'runner',widow:'stalker',cantor:'horror'}[type],fallback=createFallback(type),group=new THREE.Group();group.add(fallback.group);let loaded=null,dead=false,staggered=false,disposed=false;
- const height={graft:1.6,widow:2.6,cantor:3.2}[type],weakHeight={graft:.9,widow:1.6,cantor:2}[type];
+ const {height,weakHeight}=CREATURES[type];
+ fallback.group.scale.setScalar(height/{graft:1.6,widow:2.6,cantor:3.2}[type]);
  const weak=new THREE.Mesh(new THREE.SphereGeometry(type==='cantor'?.14:.10,12,8),new THREE.MeshStandardMaterial({color:0xffb46a,emissive:type==='cantor'?0x34859b:0xc45912,emissiveIntensity:.9,roughness:.4}));weak.position.set(0,weakHeight,-.21);weak.name='exposed sensory node';weak.userData.weakpoint=true;group.add(weak);
  const ready=loadCreature(id).then(gltf=>{if(disposed)return;loaded=animatedCreature(gltf);const box=new THREE.Box3().setFromObject(loaded.group),scale=height/(box.max.y-box.min.y);loaded.group.scale.setScalar(scale);loaded.group.position.y=-box.min.y*scale;loaded.group.rotation.y=Math.PI;group.add(loaded.group);group.remove(fallback.group);fallback.dispose();group.userData.assetReady=true;}).catch(error=>{group.userData.assetError=String(error);});
  return{group,ready,update(dt,time,{speed=0,attack=0,stun=0,death=0,vulnerable=false}={}){

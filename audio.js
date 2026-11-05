@@ -77,6 +77,12 @@ export function createAudio() {
       case 'arc': noise(.19,.22,1900,.8);tone(330,62,.17,.13,'triangle');break;
       case 'sonar': tone(502,489,.6,.14,'sine');tone(757,729,.43,.055,'sine',.04);break;
       case 'cryo': noise(.43,.18,1120,.65);noise(.23,.09,410,1.4,.08);break;
+      case 'knock':
+        for(const [delay,pan] of [[0,-.55],[.17,-.55],[.72,.65]]){
+          tone(158,63,.14,.19,'triangle',delay,pan);
+          noise(.10,.12,350,2,delay,pan);
+        }
+        break;
       case 'alarm': [0,.4,.8].forEach(delay=>tone(330,310,.29,.12,'triangle',delay));break;
       case 'scare': noise(1.3,.34,750,.8);tone(92,27,2.2,.3,'sawtooth');tone(441,129,1.4,.13,'triangle',.08);break;
       case 'death': noise(1.8,.34,480,.6);tone(70,19,2.8,.34,'sawtooth');tone(630,41,1.2,.1,'triangle');break;

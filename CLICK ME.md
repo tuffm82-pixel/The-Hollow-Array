@@ -4,7 +4,7 @@
 
 **Chapter One: Static in the Pines** — an abandoned mountain observatory, three creatures, three tools, machinery puzzles and a cliffhanger ending.
 
-Open in Safari on iPad, turn sideways and tap **ENTER STATION**. Left thumb moves; swipe the right side to look. Tap the tool buttons to switch equipment. Hold **FIRE** to charge the Arc Spool and release to shoot.
+Open in Safari on iPad, turn sideways and tap **ENTER STATION**. Left thumb moves; swipe the right side to look. Tap the tool buttons to switch equipment. Aim at the creature’s body and tap **FIRE**. Use the marked room equipment to open its armour first.
 
 ## [⬇ DOWNLOAD FOR OFFLINE DESKTOP PLAY](https://raw.githubusercontent.com/tuffm82-pixel/The-Hollow-Array/main/downloads/THE-HOLLOW-ARRAY.zip)
 
