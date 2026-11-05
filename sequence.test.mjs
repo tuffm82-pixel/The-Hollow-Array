@@ -1,0 +1,2 @@
+import test from'node:test';import assert from'node:assert/strict';import{createMemoryTask}from'./sequence.js';
+test('receiver must be watched then repeated; an error restarts the current pattern',()=>{const s=createMemoryTask();s.act(0);assert.equal(s.entered,0);for(let i=0;i<35;i++)s.update(.1);assert.equal(s.phase,'input');s.act(3);assert(s.mistake);assert.equal(s.round,0);for(const pattern of [[0,2,1],[3,1,0,2],[2,0,3,1,2]]){for(let i=0;i<65;i++)s.update(.1);for(const pad of pattern)s.act(pad);}assert(s.done);});

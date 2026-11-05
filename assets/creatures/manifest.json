@@ -1,0 +1,59 @@
+[
+  {
+    "id": "stalker",
+    "source": "https://3dassets.dev/assets/fps-survival-forest-outpost-creature-stalker-ec567238",
+    "sourceGLB": "https://cdn.3dassets.dev/assets/32708/v1/model.glb",
+    "license": "CC0-1.0",
+    "sourceSHA256": "5ba35f5b55dbb9773ae775b3c5439eeb62f8eb039e8fc8a39ca67ba80e6e9bf8",
+    "bytes": 570548,
+    "triangles": 12016,
+    "bones": 16,
+    "materials": 5,
+    "clips": {
+      "idle": 3.6,
+      "walk": 1.12,
+      "run": 0.64,
+      "attack": 1.25,
+      "stagger": 0.65,
+      "death": 2.1
+    }
+  },
+  {
+    "id": "runner",
+    "source": "https://3dassets.dev/assets/fps-survival-forest-outpost-creature-infected-runner-d6e26047",
+    "sourceGLB": "https://cdn.3dassets.dev/assets/32707/v1/model.glb",
+    "license": "CC0-1.0",
+    "sourceSHA256": "ae52df0a2ebbae2126cd45dc72db77f5e5032d2f0efdb8694241b20d28738f20",
+    "bytes": 577960,
+    "triangles": 12564,
+    "bones": 16,
+    "materials": 5,
+    "clips": {
+      "idle": 3.6,
+      "walk": 1.12,
+      "run": 0.64,
+      "attack": 1.25,
+      "stagger": 0.65,
+      "death": 2.1
+    }
+  },
+  {
+    "id": "horror",
+    "source": "https://3dassets.dev/assets/undead-horde-and-infected-variants-multi-limbed-horror-7fdc819a",
+    "sourceGLB": "https://cdn.3dassets.dev/assets/12009/v1/model.glb",
+    "license": "CC0-1.0",
+    "sourceSHA256": "761da00190b969d5512a8beba7c74ebc7f47832bb26b93d05307274837f2dc85",
+    "bytes": 411284,
+    "triangles": 6219,
+    "bones": 22,
+    "materials": 4,
+    "clips": {
+      "idle": 3.6,
+      "walk": 1.12,
+      "run": 0.64,
+      "attack": 1.25,
+      "stagger": 0.65,
+      "death": 2.1
+    }
+  }
+]
