@@ -32,7 +32,7 @@ export const STATIONS=Object.freeze([
  {id:'signal',position:{x:0,z:-73},label:'Telescope resonance receiver'},
  {id:'cantor',position:ARENAS.cantor.panel,label:ARENAS.cantor.label},
  {id:'rail',position:{x:8,z:-70},label:'Lift drive service panel'},
- {id:'lift',position:{x:0,z:-79},label:'Lower observatory lift'},
+ {id:'lift',position:{x:8,z:-80},label:'Lift pressure console'},
  {id:'exit',position:{x:0,z:-79},label:'Enter the lower observatory'},
 ]);
 export const STAGES=Object.freeze([
@@ -49,8 +49,8 @@ export const STAGES=Object.freeze([
  {id:'signal',title:'11 / Do not repeat the voice',description:'Calibrate the telescope receiver by repeating its light sequences.',puzzle:'sequence'},
  {id:'cantor',title:'12 / It knows your voice',description:ARENAS.cantor.instruction,combat:'cantor'},
  {id:'rail',title:'13 / The knock at the gate',description:'Use the drive panel beside the dome entrance to release the lift.',puzzle:'circuits'},
- {id:'lift',title:'14 / Two quick, one slow',description:'Balance the lift pressure. Listen for Mara’s knock while the gate opens.',puzzle:'pressure'},
- {id:'exit',title:'15 / Chapter one: Downward',description:'Enter the descent lift once its boarding light is green.'},
+ {id:'lift',title:'14 / Two quick, one slow',description:'Balance the lift pressure at the console behind the telescope.',puzzle:'pressure'},
+ {id:'exit',title:'15 / One last voice',description:'Use the telescope for cover until the gate opens. Reach the lift and decide what to do with the intercom.'},
 ]);
 export const CREATURES=Object.freeze({
  graft:{name:'Graft Runner',spawn:{x:-39,z:3.7},home:{x:-40,z:0},health:3,height:2.45,weakHeight:1.38,speed:2.5},

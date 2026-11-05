@@ -22,7 +22,7 @@ const storage={get(k,f){try{return JSON.parse(localStorage.getItem(k))??f;}catch
 const prefs={sound:true,reducedMotion:matchMedia('(prefers-reduced-motion: reduce)').matches,sensitivity:1,brightness:1.1,quality:'high',...storage.get('hollow-settings',{})};
 const audio=createAudio();
 const voice=createVoice();
-const tasks=createTasks({onComplete:id=>completeStation(id),onNoise:()=>{player.noiseTime=gameTime;player.noisyTask=true;audio.cue('alarm');}});
+const tasks=createTasks({onComplete:(id,choice)=>completeStation(id,{choice}),onNoise:()=>{player.noiseTime=gameTime;player.noisyTask=true;audio.cue('alarm');}});
 let world,monster,actors=[],tools=createToolState(),campaign=createCampaign(),mode='home',settingsReturn='home',gameTime=0,subtitleUntil=0,grace=0,stepTime=0,scareCooldown=0,endingTime=0;
 let attack=null,hands=null,equipment=null,lastTransmission='',nextScare=35,finale=null,finaleCompleted=false,finaleVoice=false;
 let lastFrame=performance.now(),lastUi=0,runToggle=false,stamina=1,exhausted=false,fireInput=null,nearest=null;
@@ -45,7 +45,8 @@ function begin(checkpoint=0){
  arenaState=createArenaState();
  Object.assign(player,checkpointSpawn(campaign.state.chapter),{pitch:0,hidden:false,moving:false,running:false,noiseTime:-1,noisyTask:false,health:3,hurtUntil:0});
  tools=createToolState(campaign.state.inventory);
- for(const a of actors){const data=CREATURES[a.type];Object.assign(a,{x:data.spawn.x,z:data.spawn.z,hp:campaign.state.defeated.includes(a.type)?0:data.health,cycle:0,frozen:0,revealed:0,arenaBroken:false,arenaWindow:0,deathTime:campaign.state.defeated.includes(a.type)?3:0,alert:0,visual:false,seenHiding:false,speed:0,stride:0,lastNoise:-1,lastKnown:{...data.home}});a.view.group.position.set(a.x,0,a.z);a.view.group.rotation.y=0;a.view.group.visible=false;}
+ for(const a of actors){const data=CREATURES[a.type];Object.assign(a,{x:data.spawn.x,z:data.spawn.z,hp:campaign.state.defeated.includes(a.type)?0:data.health,cycle:0,frozen:0,revealed:0,arenaBroken:false,arenaWindow:0,echo:false,deathTime:campaign.state.defeated.includes(a.type)?3:0,alert:0,visual:false,seenHiding:false,speed:0,stride:0,lastNoise:-1,lastKnown:{...data.home}});a.view.group.position.set(a.x,0,a.z);a.view.group.rotation.y=0;a.view.group.visible=false;}
+ if(campaign.state.objective.id==='exit')startLiftPursuit();
  enemy=actors[0];monster=enemy.view;
  resetInput();document.body.classList.remove('hidden-player','hit');mode='playing';showScreen('hud');audio.start();audio.setMuted(!prefs.sound);voice.setEnabled(prefs.sound);voice.resume();voice.unlock();audio.resume();say(campaign.state.message,12);save();updateHUD();
 }
@@ -71,6 +72,9 @@ function use(){
  if(player.hidden){hide();return;}
  if(!nearest){say('Move closer to a marked station, then tap USE.',4,false);return;}
  const stage=STAGES[campaign.state.chapter];
+ if(stage.id==='exit'&&nearest.id==='exit'&&campaign.state.extractionRemaining<=0){
+  tasks.open({id:'exit',puzzle:'decision'});resetInput();return;
+ }
  if(stage.combat&&nearest.id===stage.id){
   const a=actors.find(actor=>actor.type===stage.combat);
   const arena=ARENAS[stage.combat];
@@ -84,8 +88,14 @@ function use(){
  if(nearest.id===stage.id&&stage.puzzle){tasks.open({...stage,index:campaign.state.chapter});resetInput();return;}
  completeStation(nearest.id);
 }
-function completeStation(id,{combatWon=false}={}){
- const result=campaign.interact(id,{combatWon});if(result.ok)voice.stop();say(result.message,15,result.ok);if(result.cue)audio.cue(result.cue);
+function startLiftPursuit(){
+ const echo=actors.find(a=>a.type==='cantor');
+ Object.assign(echo,{echo:true,x:-8,z:-72,hp:1,deathTime:0,cycle:0,frozen:0,revealed:0,arenaBroken:false,arenaWindow:0,alert:18,lastKnown:{x:player.x,z:player.z}});
+ echo.view.group.position.set(echo.x,0,echo.z);
+ grace=1.6;
+}
+function completeStation(id,{combatWon=false,choice}={}){
+ const result=campaign.interact(id,{combatWon,choice});if(result.ok)voice.stop();say(result.message,15,result.ok);if(result.cue)audio.cue(result.cue);
  if(!result.ok)return;
  arenaState=createArenaState();
  save();
@@ -93,7 +103,7 @@ function completeStation(id,{combatWon=false}={}){
  if(STAGES[campaign.state.chapter]?.combat)grace=5;
  if(result.event==='power-online'){grace=10;audio.cue('scare');}
  if(result.event==='black-box'){scareCooldown=0;}
- if(result.event==='extraction-started'){say(result.message,15);}
+ if(result.event==='extraction-started')startLiftPursuit();
  if(campaign.state.phase==='won')finish();updateHUD();
 }
 function hide(){
@@ -109,6 +119,7 @@ function updateEnemy(dt){
  let nearestActor=null,nearestDistance=Infinity,threat=.03;
  for(const a of actors){
   const intro=STAGES.findIndex(s=>s.combat===a.type);a.view.group.visible=campaign.state.chapter>=intro;if(!a.view.group.visible)continue;
+  if(a.echo&&tasks.id==='exit'){a.visual=false;continue;}
   if(a.hp<=0){a.deathTime+=dt;a.view.update(dt,gameTime,{death:clamp(a.deathTime/2.5,0,1)});continue;}
   a.frozen=Math.max(0,a.frozen-dt);a.revealed=Math.max(0,a.revealed-dt);
   const arena=ARENAS[a.type],current=STAGES[campaign.state.chapter]?.combat===a.type;
@@ -180,7 +191,9 @@ function findAimTarget(){
 function releaseTool(){
  if(mode!=='playing'||campaign.state.phase!=='playing'||tasks.active||player.hidden){cancelFire();return;}
  const {target,options}=findAimTarget();
- const result=fireTool(tools,target,options);say(result.message,5,false);if(result.used){audio.cue(tools.selected);player.noiseTime=gameTime;player.noisyTask=true;if(target&&options.visible){target.alert=7;target.lastKnown={x:player.x,z:player.z};}}
+ const result=fireTool(tools,target,options);
+ say(target?.echo&&result.event==='armour'?'The copy shrugs off the shot. Slow it with CRYO or break sight behind the telescope.':result.message,5,false);
+ if(result.used){audio.cue(tools.selected);player.noiseTime=gameTime;player.noisyTask=true;if(target&&options.visible){target.alert=7;target.lastKnown={x:player.x,z:player.z};}}
  if(result.event==='defeat'){target.deathTime=0;const stage=STAGES[campaign.state.chapter];if(stage.combat===target.type)completeStation(stage.id,{combatWon:true});}updateHUD();
 }
 function move(dt){
@@ -247,12 +260,12 @@ function frame(now){
  requestAnimationFrame(frame);const dt=Math.min(.05,Math.max(0,(now-lastFrame)/1000));lastFrame=now;
  if(!world)return;
  if(mode==='home'){for(const a of actors)a.view.group.visible=false;world.camera.position.set(1.3,1.68,6);world.camera.rotation.set(-.025,Math.sin(now*.00008)*.13,0,'YXZ');monster.group.visible=false;world.update(dt,now/1000,player,{brightness:prefs.brightness,flashlight:true});}
- if(mode==='cinematic'){finale.update(dt);if(finale.time>5.5&&!finaleVoice){finaleVoice=true;audio.cue('scare');voice.speak('Where did you leave your gloves?',{speaker:'mimic',interrupt:true});}finale.render();if(finale.done){finaleCompleted=true;finish();}return;}
+ if(mode==='cinematic'){finale.update(dt);if(finale.time>5.5&&!finaleVoice){finaleVoice=true;audio.cue('scare');voice.speak(campaign.state.choice==='cut'?'Keep the light on.':'Where did you leave your gloves?',{speaker:campaign.state.choice==='cut'?'radio':'mimic',interrupt:true});}finale.render();if(finale.done){finaleCompleted=true;finish();}return;}
  if(mode==='playing'){
   gameTime+=dt;updateTools(tools,dt);grace=Math.max(0,grace-dt);scareCooldown-=dt;
   if(campaign.state.phase==='playing'){
    move(dt);if(tasks.active){const station=STATIONS.find(p=>p.id===tasks.id);if(!station||dist(station.position,player)>3)tasks.close();else tasks.update(dt);}
-   const event=campaign.update(dt,player);if(event){say(event.message,12);if(event.cue&&event.event!=='death')audio.cue(event.cue);}
+   const event=tasks.id==='exit'?null:campaign.update(dt,player);if(event){say(event.message,12);if(event.cue&&event.event!=='death')audio.cue(event.cue);}
    if(campaign.state.phase==='playing'){const proximity=updateEnemy(dt);audio.setThreat(Math.max(proximity,campaign.state.threat*.5));document.documentElement.style.setProperty('--danger',proximity.toFixed(2));}
    else if(campaign.state.phase==='dead'&&!attack)startDeath(false);
    if(gameTime>nextScare&&campaign.state.chapter>=2){audio.cue('whisper');nextScare=gameTime+45+campaign.state.chapter*7;}

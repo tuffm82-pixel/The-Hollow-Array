@@ -3,3 +3,10 @@ body.shot-lined-up #crosshair {
  color: #baf5c8;
  text-shadow: 0 0 9px #78e09c, 0 1px 3px #020a07;
 }
+.lift-choices {
+ display: grid;
+ gap: 10px;
+}
+.lift-choices button {
+ width: 100%;
+}
