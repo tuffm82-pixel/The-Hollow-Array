@@ -23,6 +23,22 @@ export const TAPES=Object.freeze([
  {id:'tape-records',position:{x:-9,z:-24.2},label:'Tape: The PA test',message:'OWEN, PA TEST · The speakers still draw it. Hit the test switch once, then take the other records door. I cut a service entrance at the south end of the shelves.'},
  {id:'tape-infirmary',position:{x:39,z:3.6},label:'Tape: Proof of life',message:'MARA, PRIVATE TAPE · If you hear me ask you to answer the intercom, walk away from it. I can open the lift by hand. I never needed your voice.'},
 ]);
+export const SUPPLIES=Object.freeze([
+ {id:'kit-records',position:{x:-17.3,z:-17.5},label:'Records first-aid kit'},
+ {id:'kit-medical',position:{x:44.2,z:3},label:'Infirmary first-aid kit'},
+]);
+export const FIELD_PUZZLES=Object.freeze({
+ workshop:{order:false,hint:'Aim at the marked workshop rigs and tap FIRE. Use ARC for power, ECHO for the receiver and CRYO for the hot pipe.',devices:[
+  {id:'load',label:'Load coil',tool:'arc',x:8,z:-39.7,y:1.86},
+  {id:'test-echo',label:'Test receiver',tool:'sonar',x:13,z:-40.4,y:1.87},
+  {id:'coolant',label:'Hot pipe',tool:'cryo',x:20.5,z:-31.8,y:1.9},
+ ]},
+ relay:{order:true,hint:'Use ECHO on the numbered relays in order. Relay 03 is on the service passage side of the workshop.',devices:[
+  {id:'relay-1',label:'01 · Supply relay',tool:'sonar',x:20.7,z:-35.5,y:1.95},
+  {id:'relay-2',label:'02 · Bridge relay',tool:'sonar',x:11,z:-39.9,y:1.95},
+  {id:'relay-3',label:'03 · Dome feed',tool:'sonar',x:2.64,z:-39.7,y:1.9},
+ ]},
+});
 export const ARENAS=Object.freeze({
  graft:{zone:'generator',station:'hound',panel:{x:-36.5,z:-4.8},hazard:{x:-39,z:-2},radius:1.8,kind:'lure',label:'Load-test breaker',instruction:'Use the breaker. The Runner follows the sound to the live grate. Shoot when its chest opens.'},
  widow:{zone:'conservatory',station:'widow',panel:{x:-8,z:-47.3},hazard:{x:-12,z:-49},radius:2.6,kind:'spray',label:'Coolant valve',instruction:'Open the coolant valve, then draw the Stalker across the marked tiles. Circle the planters to stay out of its reach.'},
@@ -51,11 +67,11 @@ export const STAGES=Object.freeze([
  {id:'hound',title:'03 / The thing that answers',description:ARENAS.graft.instruction,combat:'graft'},
  {id:'records',title:'04 / Something in the passage',description:'Reach Records. Walk to stay quiet, or use the PA test switch to draw it away. Records has two doors.',reward:'sonar'},
  {id:'infirmary',title:'05 / Cold enough to stop a heart',description:'Search the east infirmary. Collect the Cryo Lantern and read the field notes.',reward:'cryo'},
- {id:'workshop',title:'06 / Steady hands',description:'Calibrate the tools at the workshop pressure bench.',puzzle:'pressure'},
+ {id:'workshop',title:'06 / Put the tools to work',description:FIELD_PUZZLES.workshop.hint},
  {id:'widow',title:'07 / The garden remembers',description:ARENAS.widow.instruction,combat:'widow'},
  {id:'sample',title:'08 / What the roots were hiding',description:'Recover the relay prism from the empty containment cradle.'},
  {id:'archive',title:'09 / Footsteps on the stairs',description:'Get back to Records through the service door. Use the PA or a cupboard to lose the patrol. Cabinet code: 6318.',puzzle:'code'},
- {id:'relay',title:'10 / Open the dome',description:'Retune the workshop relay and restore telescope power.',puzzle:'frequency'},
+ {id:'relay',title:'10 / Power across the wall',description:FIELD_PUZZLES.relay.hint},
  {id:'signal',title:'11 / Do not repeat the voice',description:'Calibrate the telescope receiver by repeating its light sequences.',puzzle:'sequence'},
  {id:'cantor',title:'12 / It knows your voice',description:ARENAS.cantor.instruction,combat:'cantor'},
  {id:'rail',title:'13 / The knock at the gate',description:'Use the drive panel beside the dome entrance to release the lift.',puzzle:'circuits'},

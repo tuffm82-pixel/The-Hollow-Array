@@ -7,8 +7,10 @@ import {createMonster} from './catalogue-creatures.js';
 import {createAudio} from './audio.js';
 import {createCampaign} from './campaign.js';
 import {nextWaypoint} from './navigation.js';
-import {STAGES,STATIONS,LOCKERS,CREATURES,ARENAS,ZONES,PASSAGES,TAPES,checkpointSpawn} from './layout.js';
+import {STAGES,STATIONS,LOCKERS,CREATURES,ARENAS,ZONES,PASSAGES,TAPES,SUPPLIES,FIELD_PUZZLES,checkpointSpawn} from './layout.js';
 import {createPassage,callSpeaker,advancePassage,retreatPassage,passageTarget} from './passage.js';
+import {aimDevice,pulseDevice,TOOL_LABELS} from './field-puzzles.js';
+import {createJournal} from './journal.js';
 import {perceive} from './perception.js';
 import {createTasks} from './tasks.js';
 import {createVoice} from './voice.js';
@@ -29,6 +31,8 @@ let attack=null,hands=null,equipment=null,lastTransmission='',nextScare=35,final
 let lastFrame=performance.now(),lastUi=0,runToggle=false,stamina=1,exhausted=false,fireInput=null,nearest=null;
 let arenaState=createArenaState();
 let passage=createPassage(),passageView=null;
+const knownFinds=new Set([...TAPES,...SUPPLIES].map(item=>item.id));
+let finds=new Set(),fieldLatched=new Set(),surgeUntil=0,journalPlaying=false;
 function resetPassage(){
  passage=createPassage();
  if(passageView)passageView.group.visible=false;
@@ -39,17 +43,20 @@ const lockers=LOCKERS;
 const patrol=[{x:0,z:-91},{x:0,z:-47},{x:0,z:-12},{x:0,z:-70},{x:0,z:-32}];
 const keys=new Set(),stick={x:0,y:0,id:null},look={id:null,x:0,y:0,travel:0};
 document.body.classList.toggle('touch',navigator.maxTouchPoints>0);
-function showScreen(name){for(const id of ['home','hud','pause-screen','settings','ending'])$(id).hidden=id!==name;}
+function showScreen(name){for(const id of ['home','hud','pause-screen','settings','ending','journal-screen'])$(id).hidden=id!==name;}
 function say(message,duration=8,spoken=true){$('subtitle').querySelector('p').textContent=message;subtitleUntil=gameTime+duration;$('subtitle').style.opacity=1;if(spoken){lastTransmission=message;voice.speak(message,{speaker:/^(MIMIC|STATION RADIO|THE NULL CANTOR)/.test(message)?'mimic':'radio'});}}
 function cancelFire(){fireInput=null;tools.held=false;tools.charge=0;}
 function resetInput(){keys.clear();stick.x=stick.y=0;stick.id=null;look.id=null;runToggle=false;cancelFire();$('joystick-knob').style.transform='';$('sprint').setAttribute('aria-pressed','false');}
-function save(){storage.set('hollow-checkpoint',{version:1,chapter:campaign.state.checkpoint});$('continue-game').hidden=false;}
+function save(){storage.set('hollow-checkpoint',{version:1,chapter:campaign.state.checkpoint,finds:[...finds]});$('continue-game').hidden=false;}
 function applyPreferences(){audio.setMuted(!prefs.sound);voice.setEnabled(prefs.sound);if(world){world.setQuality?.(prefs.quality);}storage.set('hollow-settings',prefs);}
 function home(){mode='home';resetInput();tasks.close();voice.stop();player.hidden=false;attack=null;if(hands)hands.visible=false;$('death-shade').style.opacity=0;document.body.classList.remove('hidden-player','hit');showScreen('home');audio.setThreat(0);$('continue-game').hidden=!storage.get('hollow-checkpoint',null);for(const a of actors)a.view.group.visible=false;$('cliffhanger').hidden=true;}
-function begin(checkpoint=0){
+function begin(checkpoint=0,savedFinds=[]){
  campaign=createCampaign(checkpoint);gameTime=0;grace=15;scareCooldown=15;stamina=1;exhausted=false;stepTime=0;endingTime=0;attack=null;nextScare=35;finaleCompleted=false;finaleVoice=false;tasks.close();if(hands)hands.visible=false;$('death-shade').style.opacity=0;
  arenaState=createArenaState();
  resetPassage();
+ finds=new Set(Array.isArray(savedFinds)?savedFinds.filter(id=>knownFinds.has(id)):[]);
+ fieldLatched=new Set();surgeUntil=0;
+ world.snapGate(campaign.state.chapter>=10);
  Object.assign(player,checkpointSpawn(campaign.state.chapter),{pitch:0,hidden:false,moving:false,running:false,noiseTime:-1,noisyTask:false,health:3,hurtUntil:0});
  tools=createToolState(campaign.state.inventory);
  for(const a of actors){const data=CREATURES[a.type];Object.assign(a,{x:data.spawn.x,z:data.spawn.z,hp:campaign.state.defeated.includes(a.type)?0:data.health,cycle:0,frozen:0,revealed:0,arenaBroken:false,arenaWindow:0,echo:false,deathTime:campaign.state.defeated.includes(a.type)?3:0,alert:0,visual:false,seenHiding:false,speed:0,stride:0,lastNoise:-1,lastKnown:{...data.home}});a.view.group.position.set(a.x,0,a.z);a.view.group.rotation.y=0;a.view.group.visible=false;}
@@ -59,6 +66,18 @@ function begin(checkpoint=0){
 }
 function pause(){if(mode!=='playing')return;mode='paused';resetInput();tasks.key('Space',false);tasks.setVisible(false);showScreen('pause-screen');audio.suspend();voice.pause();}
 function resume(){if(mode!=='paused')return;mode='playing';showScreen('hud');tasks.setVisible(true);audio.resume();voice.resume();lastFrame=performance.now();}
+function openJournal(){
+ if(mode!=='playing'||campaign.state.phase!=='playing')return;
+ mode='journal';document.body.classList.add('journal-open');resetInput();tasks.key('Space',false);tasks.setVisible(false);
+ audio.suspend();voice.pause();journalPlaying=false;showScreen('journal-screen');
+ journal.show({objective:campaign.state.objective.description,inventory:tools.inventory,finds,player,chapter:campaign.state.chapter});
+}
+function closeJournal(){
+ if(mode!=='journal')return;
+ if(journalPlaying)voice.stop();
+ document.body.classList.remove('journal-open');mode='playing';showScreen('hud');tasks.setVisible(true);audio.resume();voice.resume();
+ lastFrame=performance.now();$('field-journal').focus();
+}
 function settings(){settingsReturn=mode;mode='settings';resetInput();showScreen('settings');audio.suspend();voice.pause();}
 function finish(){if(mode==='ending')return;if(campaign.state.phase==='won'&&!finaleCompleted){mode='cinematic';resetInput();tasks.close();showScreen('');voice.stop();finale.start();$('skip-film').hidden=false;return;}$('skip-film').hidden=true;mode='ending';resetInput();tasks.close();const won=campaign.state.phase==='won';$('end-label').textContent=won?'CHAPTER ONE COMPLETE':'EXPEDITION SIGNAL LOST';$('end-title').textContent=won?'The Undersky is waiting.':'It found you.';$('end-copy').textContent=campaign.state.message;$('retry').hidden=won;showScreen('ending');audio.setThreat(0);if(won){$('cliffhanger').hidden=false;audio.cue('scare');voice.speak(campaign.state.message,{interrupt:true});}}
 function caught(reason,creature=true){if(campaign.state.phase!=='playing')return;campaign.die(reason);startDeath(creature);}
@@ -80,8 +99,13 @@ function use(){
  if(!nearest){say('Move closer to a marked station, then tap USE.',4,false);return;}
  const stage=STAGES[campaign.state.chapter];
  if(nearest.message){
-  voice.stop();audio.cue('interact');say(nearest.message,19);
+  finds.add(nearest.id);save();voice.stop();audio.cue('interact');say(nearest.message,19);
   return;
+ }
+ if(nearest.id.startsWith('kit-')){
+  if(player.health>=3){say('Health is full. The kit will stay here.',4,false);return;}
+  player.health=Math.min(3,player.health+1);finds.add(nearest.id);save();
+  audio.cue('interact');say('Field dressing applied. Recovered one health.',4,false);updateHUD();return;
  }
  if(nearest.id==='passage-pa'){
   if(callSpeaker(passage)){
@@ -104,6 +128,9 @@ function use(){
   }else say(arenaState.armed?'Already active. Watch the marked area.':'The equipment is resetting.',3,false);
   updateHUD();return;
  }
+ if(FIELD_PUZZLES[stage.id]&&nearest.id===stage.id){
+  say(FIELD_PUZZLES[stage.id].hint,10,false);return;
+ }
  if(nearest.id===stage.id&&stage.puzzle){tasks.open({...stage,index:campaign.state.chapter});resetInput();return;}
  completeStation(nearest.id);
 }
@@ -118,6 +145,8 @@ function completeStation(id,{combatWon=false,choice}={}){
  if(!result.ok)return;
  arenaState=createArenaState();
  resetPassage();
+ fieldLatched=new Set();
+ if(id==='relay'){surgeUntil=gameTime+2.2;audio.cue('power-return');}
  save();
  tools.inventory=[...campaign.state.inventory];if(!tools.inventory.includes(tools.selected))tools.selected=tools.inventory[0]||'arc';
  if(STAGES[campaign.state.chapter]?.combat)grace=5;
@@ -133,7 +162,7 @@ function hide(){
  else say('Find a tall locker beside the main passage to hide.',4,false);
  $('hide').setAttribute('aria-pressed',String(player.hidden));
 }
-function walkable(x,z){return isWalkable(x,z,.28);}
+function walkable(x,z){return isWalkable(x,z,.28)&&world.gateClear(x,z,.28);}
 function lineOfSight(a,b){return world.hasLineOfSight(a,b);}
 function soundPan(point){
  const dx=point.x-player.x,dz=point.z-player.z;
@@ -266,8 +295,31 @@ function findAimTarget(){
  }
  return{target,options};
 }
+function currentDevice(puzzle){
+ return aimDevice(puzzle,world.camera.position,player.yaw,player.pitch,lineOfSight,fieldLatched);
+}
+function useFieldTool(){
+ const stage=campaign.state.objective.id,puzzle=FIELD_PUZZLES[stage];
+ if(!puzzle)return false;
+ const device=currentDevice(puzzle);
+ if(!device)return false;
+ cancelFire();
+ if(tools.cooldown>0){say('The tool is resetting.',2,false);return true;}
+ const result=pulseDevice(puzzle,fieldLatched,device.id,tools.selected);
+ if(result.status==='wrong-tool')say(`Use ${TOOL_LABELS[device.tool]} on ${device.label}.`,4,false);
+ else if(result.status==='wrong-order')say(`Power ${result.next.label} first.`,4,false);
+ else if(result.status==='latched')say('This device is already powered.',3,false);
+ else if(result.status==='powered'){
+  tools.cooldowns[tools.selected]=tools.cooldown=.55;tools.effect=.35;
+  world.flashDevice(world.camera.position,device);audio.cue(tools.selected);
+  if(result.complete)completeStation(stage);
+  else say(`${device.label} connected. ${fieldLatched.size}/${puzzle.devices.length} powered.`,4,false);
+ }
+ updateHUD();return true;
+}
 function releaseTool(){
  if(mode!=='playing'||campaign.state.phase!=='playing'||tasks.active||player.hidden){cancelFire();return;}
+ if(useFieldTool())return;
  const {target,options}=findAimTarget();
  const result=fireTool(tools,target,options);
  const message=target?.echo&&result.event==='armour'?'The copy shrugs off the shot. Slow it with CRYO or break sight behind the telescope.':result.used&&!target&&passage.phase==='patrol'?'The shot echoes down the hall. Lose it through a side door.':result.message;
@@ -311,6 +363,15 @@ function updateHUD(){
  const aiming=mode==='playing'&&current&&tools.inventory.includes(tools.selected)?findAimTarget():null;
  const aimed=aiming?.target===current&&aiming.options.aimError<=(tools.selected==='arc'?ARC_AIM_ANGLE:.65);
  const open=current&&isVulnerable(current);
+ const field=FIELD_PUZZLES[state.objective.id];
+ const aimedDevice=field&&mode==='playing'?currentDevice(field):null;
+ document.body.classList.toggle('device-lined-up',Boolean(aimedDevice));
+ if(field){
+  const remaining=field.devices.filter(device=>!fieldLatched.has(device.id));
+  const label=`${fieldLatched.size}/${field.devices.length} connected`;
+  if(aimedDevice)$('objective-detail').textContent=`${aimedDevice.label} · ${TOOL_LABELS[aimedDevice.tool]} · ${label}`;
+  else if(remaining.length)$('objective-detail').textContent=`${field.hint} ${label}.`;
+ }
  document.body.classList.toggle('shot-lined-up',Boolean(aimed&&open&&tools.selected==='arc'&&!tools.cooldown));
  if(arena){
   if(open)$('objective-detail').textContent='Armour open. Aim at the body and tap FIRE.';
@@ -319,15 +380,17 @@ function updateHUD(){
  }
  const sec=Math.ceil(state.remaining);$('timer').textContent=`${String(Math.floor(sec/60)).padStart(2,'0')}:${String(sec%60).padStart(2,'0')}`;
  if(objective){
-  const marker=arena&&arenaState.armed?arena.hazard:objective.position;
+  const nextDevice=field?.devices.find(device=>!fieldLatched.has(device.id));
+  const marker=nextDevice|| (arena&&arenaState.armed?arena.hazard:objective.position);
   const target=nextWaypoint(player,marker),angle=Math.atan2(target.x-player.x,-(target.z-player.z))+player.yaw;
   $('direction').style.transform=`rotate(${angle}rad)`;
-  $('distance').textContent=`${arena&&arenaState.armed?'Marked hazard':objective.label} · ${Math.ceil(dist(player,marker))} M`;
+  $('distance').textContent=`${nextDevice?.label||(arena&&arenaState.armed?'Marked hazard':objective.label)} · ${Math.ceil(dist(player,marker))} M`;
  }
  const intercom=PASSAGES[state.objective.id];
  nearest=world.interactables.find(p=>p.id===state.objective.id&&dist(p.position,player)<2.5)
   ||(intercom&&dist(intercom.position,player)<1.85?{...intercom,id:'passage-pa'}:null)
   ||TAPES.find(tape=>dist(tape.position,player)<1.75)
+  ||SUPPLIES.find(supply=>!finds.has(supply.id)&&dist(supply.position,player)<1.75)
   ||world.interactables.find(p=>dist(p.position,player)<2.5)||null;
  $('interact').classList.toggle('near',!!nearest);$('context-hint').textContent=player.hidden?'HIDDEN · TAP HIDE TO LEAVE':nearest?`USE · ${nearest.label}`:'';
  $('sprint').setAttribute('aria-pressed',String(player.running));$('sprint').textContent=stamina<.15?'TIRED':'RUN';$('hide').setAttribute('aria-pressed',String(player.hidden));
@@ -361,14 +424,14 @@ function frame(now){
   }
   else if(campaign.state.phase==='dead')updateDeath(dt);
   $('subtitle').style.opacity=gameTime<subtitleUntil?1:0;
-  world.update(dt,gameTime,player,{...campaign.state,arenaType:campaign.state.objective.combat,arenaArmed:arenaState.armed,arenaCooldown:arenaState.cooldown,brightness:prefs.brightness,flashlight:!player.hidden});
+  world.update(dt,gameTime,player,{...campaign.state,arenaType:campaign.state.objective.combat,arenaArmed:arenaState.armed,arenaCooldown:arenaState.cooldown,fieldId:campaign.state.objective.id,fieldLatched,finds,blackout:clamp((surgeUntil-gameTime)/2.2,0,1)*.64,brightness:prefs.brightness,flashlight:!player.hidden});
   if(now-lastUi>100){updateHUD();lastUi=now;}
  }
  equipment??=createEquipment(world.camera);equipment.update(dt,gameTime,{visible:mode==='playing'&&campaign.state.phase==='playing'&&campaign.state.inventory.includes(tools.selected)&&!player.hidden,selected:tools.selected,charge:tools.charge,effect:tools.effect,moving:player.moving,running:player.running,reducedMotion:prefs.reducedMotion});
  world.render();
 }
 function bind(){
- $('new-game').onclick=()=>begin(0);$('continue-game').onclick=()=>{const saved=storage.get('hollow-checkpoint',{});begin(saved.version===1?saved.chapter:0);};$('pause').onclick=pause;$('resume').onclick=resume;$('quit').onclick=home;$('end-home').onclick=home;$('retry').onclick=()=>begin(campaign.state.checkpoint);$('home-settings').onclick=settings;$('pause-settings').onclick=settings;
+ $('new-game').onclick=()=>begin(0);$('continue-game').onclick=()=>{const saved=storage.get('hollow-checkpoint',{});begin(saved.version===1?saved.chapter:0,saved.version===1?saved.finds:[]);};$('pause').onclick=pause;$('resume').onclick=resume;$('quit').onclick=home;$('end-home').onclick=home;$('retry').onclick=()=>begin(campaign.state.checkpoint,[...finds]);$('home-settings').onclick=settings;$('pause-settings').onclick=settings;
  $('close-settings').onclick=()=>{mode=settingsReturn;showScreen(mode==='home'?'home':'pause-screen');applyPreferences();};$('interact').onclick=use;$('hide').onclick=hide;$('sprint').onclick=()=>{runToggle=!runToggle;};
  for(const [id,key] of [['sound','sound'],['reduced-motion','reducedMotion'],['sensitivity','sensitivity'],['brightness','brightness'],['quality','quality']]){const el=$(id);if(el.type==='checkbox')el.checked=prefs[key];else el.value=prefs[key];el.oninput=()=>{prefs[key]=el.type==='checkbox'?el.checked:el.type==='range'?Number(el.value):el.value;applyPreferences();};}
  const joystick=$('joystick');function stickMove(e){const rect=joystick.getBoundingClientRect(),radius=rect.width*.36;let x=(e.clientX-rect.left-rect.width/2)/radius,y=(e.clientY-rect.top-rect.height/2)/radius;const len=Math.hypot(x,y);if(len>1){x/=len;y/=len;}stick.x=x;stick.y=y;$('joystick-knob').style.transform=`translate(${x*radius}px,${y*radius}px)`;}
@@ -387,8 +450,11 @@ function bind(){
   if(e.pointerType==='mouse'&&look.travel<7&&beginFire('aim-click'))endFire('aim-click',true);
  };
  zone.onpointercancel=zone.onlostpointercapture=e=>{if(e.pointerId===look.id)look.id=null;};
- addEventListener('keydown',e=>{if(e.code==='Escape'){if(mode==='playing')pause();else if(mode==='paused')resume();return;}if(mode!=='playing')return;if(['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code))e.preventDefault();if(tasks.key(e.code,true))return;keys.add(e.code);if(!e.repeat){if(e.code==='KeyE'||e.code==='Space')use();if(e.code==='KeyH')hide();}});addEventListener('keyup',e=>{keys.delete(e.code);tasks.key(e.code,false);});addEventListener('blur',()=>{resetInput();pause();});document.addEventListener('visibilitychange',()=>{if(document.hidden){resetInput();pause();audio.suspend();voice.pause();}});addEventListener('resize',()=>world?.resize());$('scene').addEventListener('webglcontextlost',e=>{e.preventDefault();pause();$('fatal').hidden=false;});
+ addEventListener('keydown',e=>{if(e.code==='KeyJ'&&!e.repeat){if(mode==='journal')closeJournal();else openJournal();return;}if(e.code==='Escape'){if(mode==='journal')closeJournal();else if(mode==='playing')pause();else if(mode==='paused')resume();return;}if(mode!=='playing')return;if(['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code))e.preventDefault();if(tasks.key(e.code,true))return;keys.add(e.code);if(!e.repeat){if(e.code==='KeyE'||e.code==='Space')use();if(e.code==='KeyH')hide();}});addEventListener('keyup',e=>{keys.delete(e.code);tasks.key(e.code,false);});addEventListener('blur',()=>{resetInput();pause();});document.addEventListener('visibilitychange',()=>{if(document.hidden){resetInput();pause();audio.suspend();voice.pause();}});addEventListener('resize',()=>world?.resize());$('scene').addEventListener('webglcontextlost',e=>{e.preventDefault();pause();$('fatal').hidden=false;});
 }
+const journal=createJournal({onClose:closeJournal,onReplay(message){journalPlaying=true;voice.resume();voice.unlock();voice.speak(message,{interrupt:true});}});
+const journalButton=document.createElement('button');journalButton.id='field-journal';journalButton.className='secondary';journalButton.textContent='JOURNAL';journalButton.setAttribute('aria-label','Open field journal');journalButton.onclick=openJournal;
+$('pause').before(journalButton);
 const shade=document.createElement('div');shade.id='death-shade';document.body.append(shade);
 const combatHud=document.createElement('div');combatHud.id='combat-hud';combatHud.innerHTML='<div id="health">HEALTH ●●●</div><div id="creature-status"></div><div id="tool-bar"><button data-tool="arc">ARC</button><button data-tool="sonar">ECHO</button><button data-tool="cryo">CRYO</button></div><button id="fire" aria-label="Use selected tool"><span id="fire-label">FIRE</span><span class="charge-track"><i id="tool-charge"></i></span></button>';$('hud').append(combatHud);
 for(const b of combatHud.querySelectorAll('[data-tool]'))b.onclick=()=>selectTool(b.dataset.tool);
@@ -410,7 +476,7 @@ if(import.meta.env.DEV&&new URLSearchParams(location.search).has('qa'))window.__
  attack(){monster.group.position.set(player.x-Math.sin(player.yaw),0,player.z-Math.cos(player.yaw));caught('The creature takes hold of your expedition suit.');}
 };
 function makeHands(){const group=new THREE.Group(),mat=new THREE.MeshStandardMaterial({color:'#394c50',roughness:.7});for(const side of [-1,1]){const arm=new THREE.Mesh(new THREE.CapsuleGeometry(.055,.25,4,8),mat);arm.position.set(side*.24,-.22,-.43);arm.rotation.set(-.9,0,side*-.35);const palm=new THREE.Mesh(new THREE.BoxGeometry(.10,.14,.055),mat);palm.position.set(side*.2,-.06,-.56);palm.rotation.x=-.5;group.add(arm,palm);}group.visible=false;world.camera.add(group);return group;}
-try{world=createWorld($('scene'),{quality:prefs.quality});actors=Object.keys(CREATURES).map(type=>{const view=createMonster(type);world.scene.add(view.group);view.group.visible=false;return{type,view,...CREATURES[type].spawn,hp:CREATURES[type].health,cycle:0,frozen:0,revealed:0,deathTime:0};});enemy=actors[0];monster=enemy.view;hands=makeHands();finale=createFinale(world.renderer,{reducedMotion:prefs.reducedMotion});bind();applyPreferences();home();world.resize();requestAnimationFrame(frame);document.body.dataset.ready='true';if(import.meta.env.DEV)window.__hollowInspect=()=>({mode,player:{...player},enemy:{...enemy},campaign:campaign.snapshot(),passage:{...passage},tools:{...tools},monsters:actors.map(a=>({type:a.type,x:a.x,z:a.z,hp:a.hp,cycle:a.cycle,frozen:a.frozen,revealed:a.revealed,arenaBroken:a.arenaBroken,arenaWindow:a.arenaWindow,visible:a.view.group.visible})),task:tasks.state?{...tasks.state}:null,attack:attack?{time:attack.time,creature:attack.creature}:null,camera:{y:world.camera.position.y,roll:world.camera.rotation.z},drawCalls:world.renderer.info.render.calls,triangles:world.renderer.info.render.triangles});}catch(error){console.error(error);$('fatal').hidden=false;}
+try{world=createWorld($('scene'),{quality:prefs.quality});actors=Object.keys(CREATURES).map(type=>{const view=createMonster(type);world.scene.add(view.group);view.group.visible=false;return{type,view,...CREATURES[type].spawn,hp:CREATURES[type].health,cycle:0,frozen:0,revealed:0,deathTime:0};});enemy=actors[0];monster=enemy.view;hands=makeHands();finale=createFinale(world.renderer,{reducedMotion:prefs.reducedMotion});bind();applyPreferences();home();world.resize();requestAnimationFrame(frame);document.body.dataset.ready='true';if(import.meta.env.DEV)window.__hollowInspect=()=>({mode,player:{...player},enemy:{...enemy},campaign:campaign.snapshot(),passage:{...passage},fieldLatched:[...fieldLatched],finds:[...finds],gateOpen:world.gateClear(0,-66,.28),tools:{...tools},monsters:actors.map(a=>({type:a.type,x:a.x,z:a.z,hp:a.hp,cycle:a.cycle,frozen:a.frozen,revealed:a.revealed,arenaBroken:a.arenaBroken,arenaWindow:a.arenaWindow,visible:a.view.group.visible})),task:tasks.state?{...tasks.state}:null,attack:attack?{time:attack.time,creature:attack.creature}:null,camera:{y:world.camera.position.y,roll:world.camera.rotation.z},drawCalls:world.renderer.info.render.calls,triangles:world.renderer.info.render.triangles});}catch(error){console.error(error);$('fatal').hidden=false;}
 
 
 

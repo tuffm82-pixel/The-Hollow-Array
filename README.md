@@ -23,9 +23,12 @@ On iPad, open the browser link in Safari, turn sideways and tap **ENTER STATION*
 
 Aim at the creature’s body and tap **FIRE**. Use the marked room equipment to open its armour first. **ECHO** is the Resonance Fork; it exposes hidden tissue. **CRYO** is the Cryo Lantern; it freezes a creature briefly. Tools are found through the campaign, so their buttons start locked.
 
+
+Open the Field Journal from the HUD or press J to see your location and replay recovered tapes. Workshop rigs and dome relays respond to the tool printed on their signs. Aim and press FIRE to power them.
+
 ## Chapter One
 
-Fifteen operations take you through the lodge, Engineering, infirmary, observation records, workshop, conservatory and telescope dome. You must physically travel between objectives, solve circuit, pressure, frequency, code and memory puzzles, and survive the three encounters. Each creature has a different opening: watch its wind-up, break its sight behind solid walls, and use the appropriate tool. Hiding works best after you lose the creature's line of sight.
+Fifteen operations take you through the lodge, Engineering, infirmary, observation records, workshop, conservatory and telescope dome. You must physically travel between objectives, solve room-device, circuit, pressure, code and memory puzzles, and survive the three encounters. Each creature has a different opening: watch its wind-up, break its sight behind solid walls, and use the appropriate tool. Hiding works best after you lose the creature's line of sight.
 
 Completed operations save a checkpoint on this device. **Continue Transmission** resumes from it; **Retry Checkpoint** restores the last completed operation after death. The storm and preparation countdowns stop while paused. The ending completes Chapter One; Chapter Two is a future update, not an included second chapter.
 

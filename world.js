@@ -1,9 +1,11 @@
 import * as THREE from 'three';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
-import {ZONES,STATIONS,HIDE_SPOTS,ARENAS,SERVICE_DOORS,PASSAGES,TAPES} from './layout.js';
+import {ZONES,STATIONS,HIDE_SPOTS,ARENAS,SERVICE_DOORS,PASSAGES,TAPES,SUPPLIES,FIELD_PUZZLES} from './layout.js';
+import {TOOL_LABELS} from './field-puzzles.js';
 import {createAtmosphere,makeWeatheredMaterial} from './atmosphere.js';
 
 const bounds={minX:-46,maxX:48,minZ:-84,maxZ:9};
+const DOME_GATE={x:0,y:1.5,z:-66,w:5,h:3,d:.23};
 export const SOLID_PROPS=Object.freeze([
  {x:4,z:4,halfX:1.7,halfZ:.65},{x:-5.6,z:3,halfX:.9,halfZ:1.65},{x:-5.6,z:-3.8,halfX:.9,halfZ:1.65},
  {x:6.5,z:-5.4,halfX:.7,halfZ:1.75,height:3.2},
@@ -74,7 +76,7 @@ export function createWorld(canvas,{quality='high'}={}){
  const materials={concrete:makeWeatheredMaterial('concrete'),wood:makeWeatheredMaterial('wood'),metal:makeWeatheredMaterial('metal'),stone:makeWeatheredMaterial('stone'),tile:makeWeatheredMaterial('tile')};
  Object.assign(materials,{dark:new THREE.MeshStandardMaterial({color:'#0b1318',roughness:.82}),rust:new THREE.MeshStandardMaterial({color:'#6f4c35',roughness:.91,metalness:.25}),fabric:new THREE.MeshStandardMaterial({color:'#4b554d',roughness:.97}),leaf:new THREE.MeshStandardMaterial({color:'#344637',roughness:.93,side:THREE.DoubleSide}),paper:new THREE.MeshStandardMaterial({color:'#aaa28a',roughness:1}),glass:new THREE.MeshStandardMaterial({color:'#16353e',emissive:'#0b2335',emissiveIntensity:.35,metalness:.45,roughness:.2,transparent:true,opacity:.38,depthWrite:false,side:THREE.DoubleSide}),amber:new THREE.MeshStandardMaterial({color:'#edc78e',emissive:'#ed9d55',emissiveIntensity:2}),cyan:new THREE.MeshStandardMaterial({color:'#9dcace',emissive:'#75aebf',emissiveIntensity:2}),red:new THREE.MeshStandardMaterial({color:'#a54d3d',emissive:'#8c2c22',emissiveIntensity:.7}),black:new THREE.MeshStandardMaterial({color:'#020607',roughness:.58})});
  materials.wet=new THREE.MeshStandardMaterial({color:'#142222',roughness:.19,metalness:.25,transparent:true,opacity:.5,depthWrite:false});
- const batches=new Map(),dynamic=[],textures=[],hazardViews={};
+ const batches=new Map(),dynamic=[],textures=[],hazardViews={},fieldViews=[],supplyViews=[];
  function append(name,g,pos,rot=[0,0,0]){const m=new THREE.Matrix4().compose(new THREE.Vector3(...pos),new THREE.Quaternion().setFromEuler(new THREE.Euler(...rot)),new THREE.Vector3(1,1,1));g.applyMatrix4(m);if(!batches.has(name))batches.set(name,[]);batches.get(name).push(g);}
  const box=(name,x,y,z,w,h,d,rot=[0,0,0])=>{const g=new THREE.BoxGeometry(w,h,d),uv=g.attributes.uv;for(let i=0;i<uv.count;i++){const face=Math.floor(i/4),sx=(face<2?d:w)/2,sy=(face===2||face===3?d:h)/2;uv.setXY(i,uv.getX(i)*Math.max(.1,sx),uv.getY(i)*Math.max(.1,sy));}append(name,g,[x,y,z],rot);};
  const cylinder=(name,x,y,z,top,bottom,h,rot=[0,0,0],n=14)=>append(name,new THREE.CylinderGeometry(top,bottom,h,n),[x,y,z],rot);
@@ -131,6 +133,47 @@ export function createWorld(canvas,{quality='high'}={}){
   for(const dx of [-.11,.11])cylinder('metal',x+dx,1.005,z,.067,.067,.024);
   box('amber',x,.946,z+.147,.11,.04,.022);
   sign(tape.label.replace('Tape: ',''),'USE TO PLAY RECORDING',x,1.18,z,0,1.2,.32);
+ }
+ for(const supply of SUPPLIES){
+  const {x,z}=supply.position;
+  const kit=new THREE.Group();
+  const caseMesh=new THREE.Mesh(new THREE.BoxGeometry(.49,.24,.35),materials.red);
+  kit.add(caseMesh);kit.position.set(x,.68,z);
+  const marking=new THREE.MeshBasicMaterial({color:0xf1e4d1});
+  for(const [width,height] of [[.12,.035],[.035,.12]]){
+   const stripe=new THREE.Mesh(new THREE.PlaneGeometry(width,height),marking);
+   stripe.position.z=.177;kit.add(stripe);
+  }
+  scene.add(kit);supplyViews.push({id:supply.id,kit});
+  box('dark',x,.25,z,.58,.5,.41);
+ }
+ for(const [stage,puzzle] of Object.entries(FIELD_PUZZLES))for(const device of puzzle.devices){
+  const {x,y,z}=device;
+  box('metal',x,y,z-.08,.47,.38,.17);
+  box('dark',x,y-.19,z-.04,.55,.06,.22);
+  const lamp=new THREE.Mesh(new THREE.BoxGeometry(.24,.095,.04),materials.amber.clone());
+  lamp.position.set(x,y,z+.033);scene.add(lamp);
+  const signboard=sign(device.label,TOOL_LABELS[device.tool],x,y+.35,z+.045,0,1.14,.31);
+  fieldViews.push({stage,id:device.id,lamp,signboard});
+ }
+ const domeGate=new THREE.Mesh(new THREE.BoxGeometry(DOME_GATE.w,DOME_GATE.h,DOME_GATE.d),materials.metal);
+ domeGate.position.set(0,DOME_GATE.y,DOME_GATE.z);domeGate.castShadow=domeGate.receiveShadow=true;scene.add(domeGate);
+ const gateSign=sign('DOME SHUTTER','POWER VIA WORKSHOP',0,2.55,DOME_GATE.z+.14,0,2.3,.52);
+ let gateProgress=0,pulseLife=0;
+ const pulseGeometry=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(),new THREE.Vector3()]);
+ const pulse=new THREE.Line(pulseGeometry,new THREE.LineBasicMaterial({color:0x9bf0ff,transparent:true}));
+ pulse.frustumCulled=false;pulse.visible=false;scene.add(pulse);
+ function paintGate(){
+  domeGate.position.y=DOME_GATE.y+gateProgress*3.2;
+  gateSign.position.y=2.55+gateProgress*3.2;
+  domeGate.visible=gateSign.visible=gateProgress<.98;
+ }
+ function snapGate(open){gateProgress=open?1:0;paintGate();}
+ function flashDevice(origin,device){
+  const pos=pulse.geometry.attributes.position;
+  pos.setXYZ(0,origin.x,origin.y-.16,origin.z);
+  pos.setXYZ(1,device.x,device.y,device.z);
+  pos.needsUpdate=true;pulseLife=.28;
  }
  for(const [x,z,ry]of doorFrames){const wide=z===-66?5:ry?3:6;for(const side of [-1,1]){const dx=Math.cos(ry)*side*(wide/2-.05),dz=Math.sin(ry)*side*(wide/2-.05);box('metal',x+dx,1.5,z+dz,.18,3,.18);}box('metal',x,3,z,wide,.18,.26,[0,ry,0]);}
  // Lodge: damp reception, fireplace, abandoned furniture and weather station charts.
@@ -235,6 +278,14 @@ export function createWorld(canvas,{quality='high'}={}){
  function resize(){const w=canvas.clientWidth||innerWidth,h=canvas.clientHeight||innerHeight;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();}
  function setQuality(q){quality=q;renderer.setPixelRatio(Math.min(devicePixelRatio||1,q==='low'?1:1.5));renderer.shadowMap.enabled=q!=='low';torch.castShadow=q!=='low';resize();}
  function update(dt,time,player={},state={}){
+  const gateTarget=state.chapter>=10?1:0;
+  if(gateProgress!==gateTarget){gateProgress=gateTarget?Math.min(1,gateProgress+dt*.77):0;paintGate();}
+  pulseLife=Math.max(0,pulseLife-dt);pulse.visible=pulseLife>0;pulse.material.opacity=pulseLife/.28;
+  for(const {stage,id,lamp,signboard} of fieldViews){
+   lamp.visible=signboard.visible=stage===state.fieldId;
+   if(lamp.visible)lamp.material.emissive.set(state.fieldLatched?.has(id)?0x2ea775:0xc58336);
+  }
+  for(const {id,kit} of supplyViews)kit.visible=!state.finds?.has(id);
   const pos=camera.position,blackout=THREE.MathUtils.clamp(Number(state.blackout)||0,0,1),threat=THREE.MathUtils.clamp(Number(state.threat)||0,0,1);const nearest=[...sources].sort((a,b)=>(a.x-pos.x)**2+(a.z-pos.z)**2-((b.x-pos.x)**2+(b.z-pos.z)**2));
   lightPool.forEach((l,i)=>{const s=nearest[i];l.position.set(s.x,s.y,s.z);l.color.set(s.color);const flutter=.97+Math.sin(time*8.4+s.z)*Math.sin(time*1.1+s.x)*.03;l.intensity=s.power*flutter*(1-blackout*.96);});
   sky.intensity=.55*(1-blackout*.55);ambient.intensity=.14*(1-blackout*.5);const on=state.flashlight!==false&&!player.hidden;torch.intensity=on?44*(1-threat*.1):0;fill.intensity=on?1.7:.15;if(Number.isFinite(state.brightness))renderer.toneMappingExposure=THREE.MathUtils.clamp(state.brightness,.65,1.8);
@@ -250,5 +301,9 @@ export function createWorld(canvas,{quality='high'}={}){
  }
  function dispose(){atmo.dispose?.();const geoms=new Set(),mats=new Set(),maps=new Set(textures);scene.traverse(o=>{if(o.geometry)geoms.add(o.geometry);if(o.material)for(const m of Array.isArray(o.material)?o.material:[o.material])mats.add(m);});for(const m of mats)for(const value of Object.values(m))if(value?.isTexture)maps.add(value);maps.forEach(t=>t.dispose());geoms.forEach(g=>g.dispose());mats.forEach(m=>m.dispose());renderer.dispose();}
  setQuality(quality);
- return{scene,camera,renderer,render:()=>renderer.render(scene,camera),update,resize,setQuality,dispose,interactables:STATIONS.map(s=>({...s,position:{...s.position}})),hasLineOfSight:canSeeBetween};
+ return{scene,camera,renderer,render:()=>renderer.render(scene,camera),update,resize,setQuality,dispose,snapGate,flashDevice,
+  interactables:STATIONS.map(s=>({...s,position:{...s.position}})),
+  gateClear:(x,z,r)=>gateProgress>=.94||Math.abs(x)>DOME_GATE.w/2+r||Math.abs(z-DOME_GATE.z)>DOME_GATE.d/2+r,
+  hasLineOfSight:(a,b)=>canSeeBetween(a,b)&&(gateProgress>=.94||!hitSegment({...a,y:a.y??1.65},{...b,y:b.y??1.65},DOME_GATE))
+ };
 }

@@ -89,6 +89,11 @@ export function createAudio() {
         noise(.23,.12,290,.8,0,pan);
         tone(123,52,.25,.1,'triangle',0,pan);
         break;
+      case 'power-return':
+        tone(56,38,.92,.18,'triangle');
+        noise(.72,.13,360,.9,.18);
+        tone(382,680,.35,.10,'sine',.85);
+        break;
       case 'knock':
         for(const [delay,pan] of [[0,-.55],[.17,-.55],[.72,.65]]){
           tone(158,63,.14,.19,'triangle',delay,pan);
