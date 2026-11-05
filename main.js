@@ -180,7 +180,7 @@ function updatePassage(dt){
  passageView.group.visible=true;
  passageView.group.position.set(passage.x,0,passage.z);
  passageView.group.rotation.y=passage.yaw;
- passageView.update(dt,gameTime,{speed:travel>0?speed:0});
+ passageView.update(dt,gameTime,{speed:travel>0?speed:0,showWeak:false});
  passage.stride+=travel;
  if(passage.stride>.95){
   passage.stride=0;
@@ -270,7 +270,8 @@ function releaseTool(){
  if(mode!=='playing'||campaign.state.phase!=='playing'||tasks.active||player.hidden){cancelFire();return;}
  const {target,options}=findAimTarget();
  const result=fireTool(tools,target,options);
- say(target?.echo&&result.event==='armour'?'The copy shrugs off the shot. Slow it with CRYO or break sight behind the telescope.':result.message,5,false);
+ const message=target?.echo&&result.event==='armour'?'The copy shrugs off the shot. Slow it with CRYO or break sight behind the telescope.':result.used&&!target&&passage.phase==='patrol'?'The shot echoes down the hall. Lose it through a side door.':result.message;
+ say(message,5,false);
  if(result.used){audio.cue(tools.selected);player.noiseTime=gameTime;player.noisyTask=true;if(target&&options.visible){target.alert=7;target.lastKnown={x:player.x,z:player.z};}}
  if(result.event==='defeat'){target.deathTime=0;const stage=STAGES[campaign.state.chapter];if(stage.combat===target.type)completeStation(stage.id,{combatWon:true});}updateHUD();
 }

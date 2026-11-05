@@ -33,8 +33,8 @@ export function createMonster(type){
  fallback.group.scale.setScalar(height/{graft:1.6,widow:2.6,cantor:3.2}[type]);
  const weak=new THREE.Mesh(new THREE.SphereGeometry(type==='cantor'?.14:.10,12,8),new THREE.MeshStandardMaterial({color:0xffb46a,emissive:type==='cantor'?0x34859b:0xc45912,emissiveIntensity:.9,roughness:.4}));weak.position.set(0,weakHeight,-.21);weak.name='exposed sensory node';weak.userData.weakpoint=true;group.add(weak);
  const ready=loadCreature(id).then(gltf=>{if(disposed)return;loaded=animatedCreature(gltf);const box=new THREE.Box3().setFromObject(loaded.group),scale=height/(box.max.y-box.min.y);loaded.group.scale.setScalar(scale);loaded.group.position.y=-box.min.y*scale;loaded.group.rotation.y=Math.PI;group.add(loaded.group);group.remove(fallback.group);fallback.dispose();group.userData.assetReady=true;}).catch(error=>{group.userData.assetError=String(error);});
- return{group,ready,update(dt,time,{speed=0,attack=0,stun=0,death=0,vulnerable=false}={}){
-  weak.visible=death<=0;weak.material.emissiveIntensity=vulnerable?2.5:.35;
+ return{group,ready,update(dt,time,{speed=0,attack=0,stun=0,death=0,vulnerable=false,showWeak=true}={}){
+  weak.visible=showWeak&&death<=0;weak.material.emissiveIntensity=vulnerable?2.5:.35;
   if(!loaded){fallback.update(dt,time,{speed,attack,stun,death,vulnerable});return;}
   if(death>0){loaded.sample('death',Math.min(1,death)*2.1);dead=true;return;}
   if(dead){dead=false;loaded.play('idle',{immediate:true});}
