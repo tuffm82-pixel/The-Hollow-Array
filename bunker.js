@@ -1,6 +1,6 @@
 import './bunker.css';
 import * as THREE from 'three';
-import {createBunkerWorld,BUNKER_LEVELS,walkableBunker} from './bunker-world.js';
+import {createBunkerWorld,BUNKER_LEVELS,walkableBunker,bunkerGround,serviceSector,SERVICE_FIRST,SERVICE_ACCESS,SERVICE_ENTRY,SERVICE_EXIT,SERVICE_RETURN} from './bunker-world.js';
 import {createBunkerActors} from './bunker-actors.js';
 import {BUNKER_BODIES,BUNKER_ALLIES,BUNKER_OBJECTIVES,BUNKER_THREATS,BUNKER_OPENING,createBunkerStory,getBunkerObjective,advanceBunkerStory,bunkerSummary,bunkerCheckpoint} from './bunker-story.js';
 import {createMonster} from './catalogue-creatures.js';
@@ -10,7 +10,7 @@ import {createVoice} from './voice.js';
 
 const $=id=>document.getElementById(id);
 const clamp=(n,min,max)=>Math.min(max,Math.max(min,n));
-const ground=floor=>floor*-7;
+const ground=bunkerGround;
 const distance=(a,b)=>Math.hypot(a.x-b.x,a.z-b.z);
 const audio=createAudio(),voice=createVoice();
 const keys=new Set(),stick={id:null,x:0,z:0},look={id:null,x:0,y:0,travel:0};
@@ -25,11 +25,12 @@ let story=createBunkerStory(),mode='home',time=0,frameTime=performance.now();
 let lastStep=0,cooldown=0,flash=0,hurt=0,subtitle=0,sprint=false,lift=null,death=null;
 let threat=null,deathScene=null;
 const creatures=new Map();
+let serviceRead=null;
 
 function screen(next){
  mode=next;
- for(const id of ['home','hud','paused','decision','ending'])$(id).hidden=id!==next;
- document.body.classList.toggle('modal',['home','paused','decision','ending'].includes(next));
+ for(const id of ['home','hud','paused','decision','journal','ending'])$(id).hidden=id!==next;
+ document.body.classList.toggle('modal',['home','paused','decision','journal','ending'].includes(next));
 }
 function resetInput(){
  keys.clear();stick.id=look.id=null;stick.x=stick.z=0;sprint=false;$('knob').style.transform='';
@@ -39,11 +40,12 @@ function say(speaker,line,spoken=true){
  if(!line)return;
  $('speaker').textContent=speaker==='mimic'?'UNKNOWN FREQUENCY':speaker==='radio'||!speaker?'SHELTER 17 RADIO':speaker;
  $('line').textContent=line;$('dialogue').hidden=false;subtitle=time+Math.max(6,Math.min(16,line.length*.073));
- if(spoken)voice.speak(line,{speaker:speaker==='mimic'?'mimic':'radio',interrupt:true});
+ const profile=BUNKER_ALLIES.find(person=>person.name===speaker)?.id;
+ if(spoken)voice.speak(line,{speaker:profile||(speaker==='mimic'?'mimic':'radio'),interrupt:true});
 }
 function save(){
  if(story.phase==='won')return;
- write(saveKey,{story:bunkerCheckpoint(story),player:{floor:player.floor,x:player.x,z:player.z,yaw:player.yaw}});
+ write(saveKey,{story:bunkerCheckpoint(story),player:{floor:player.floor,x:player.x,z:player.z,yaw:player.yaw},serviceRead});
  $('continue').hidden=false;
 }
 function positionCamera(){
@@ -57,8 +59,10 @@ function setFloor(floor,{x=0,z=9,yaw=0}={}){
 function current(){return getBunkerObjective(story);}
 function start(saved=null){
  story=createBunkerStory(saved?.story);
- const objective=current(),floor=objective?.floor??0;
- const p=saved?.player;
+ const objective=current(),p=saved?.player;
+ const sector=story.flags.transfer?serviceSector(p?.floor):null;
+ const floor=sector?p.floor:objective?.floor??0;
+ serviceRead=story.flags.transfer&&serviceSector(saved?.serviceRead)?saved.serviceRead:null;
  const valid=p?.floor===floor&&walkableBunker(floor,p.x,p.z);
  setFloor(floor,valid?p:{});
  time=cooldown=flash=hurt=0;lastStep=0;player.health=3;death=deathScene=lift=null;
@@ -84,9 +88,9 @@ function resume(){
  if(mode!=='paused')return;
  frameTime=performance.now();voice.resume();audio.resume();screen('hud');
 }
-function arrival(nextFloor){
+function arrival(nextFloor,spawn=null){
  resetInput();
- lift={floor:nextFloor,elapsed:0,placed:false};
+ lift={floor:nextFloor,spawn,elapsed:0,placed:false};
  $('lift-fade').style.opacity='1';
  audio.cue('door-close');
 }
@@ -177,6 +181,25 @@ function openDecision(task){
  $('decision-options').querySelector('button')?.focus();
 }
 const returnLift={x:-8,z:9},nextLift={x:0,z:-10};
+function serviceAction(sector) {
+ if(sector){
+  if(distance(player,SERVICE_RETURN)<2.45)return {label:'Return to Deep Relay',run:()=>arrival(2,{...SERVICE_ACCESS,yaw:Math.PI})};
+  if(distance(player,sector.terminal)<2.45)return {label:'Read service log',run:()=>{
+   serviceRead=player.floor;
+   save();say('SERVICE RECORD',sector.note);audio.cue('interact');paintHUD();
+  }};
+  if(distance(player,SERVICE_EXIT)<2.45)return {
+   label:serviceRead===player.floor?'Enter next sector':'Gate locked · read service log',
+   run:()=>{
+    if(serviceRead!==player.floor){say('SERVICE SYSTEM','Read the service log to obtain gate clearance.',false);return;}
+    if(Number.isSafeInteger(player.floor+1))arrival(player.floor+1,SERVICE_ENTRY);
+   },
+  };
+ }else if(player.floor===2&&story.flags.transfer&&distance(player,SERVICE_ACCESS)<2.45){
+  return {label:'Enter service network',run:()=>arrival(SERVICE_FIRST,SERVICE_ENTRY)};
+ }
+ return null;
+}
 function use(){
  if(mode!=='hud'||lift||death)return;
  const task=current();
@@ -185,6 +208,10 @@ function use(){
   else{audio.cue('interact');applyAction(task);}
   return;
  }
+ const sector=serviceSector(player.floor);
+ const service=serviceAction(sector);
+ if(service){service.run();return;}
+ if(sector){say('SERVICE SYSTEM','Follow the objective, or use the express return at the entrance.',false);return;}
  if(player.floor>0&&distance(player,returnLift)<2.45){arrival(player.floor-1);return;}
  if(task&&player.floor<task.floor&&distance(player,nextLift)<2.45){arrival(player.floor+1);return;}
  if(player.floor===0&&distance(player,{x:-7.8,z:7.5})<2.5){
@@ -209,7 +236,7 @@ function targetInSight(actor){
  return alignment>.966&&player.pitch>-.44&&player.pitch<.65;
 }
 function fire(){
- if(mode!=='hud'||lift||death||cooldown>0||player.floor===0)return;
+ if(mode!=='hud'||lift||death||cooldown>0||player.floor===0||player.floor>=SERVICE_FIRST)return;
  cooldown=.48;flash=.34;audio.cue('arc');
  if(!targetInSight(threat)){say('COMBAT','Aim at the creature’s body until the reticle turns green.',false);return;}
  const actor=threat;
@@ -274,26 +301,59 @@ function move(dt){
  return {moving:traveled>0,running};
 }
 function changeText(el,value){if(el.textContent!==value)el.textContent=value;}
+function showJournal(){
+ if(mode!=='hud'||lift||death)return;
+ resetInput();voice.pause();audio.suspend();
+ const facts=[
+  [0,'The strike cut power to Shelter 17. Fallout sealed the surface exit.'],
+  [3,'The technician’s pager links the power failure to an acoustic research wing under the shelter.'],
+  [4,'An underground transfer pod can reach Shelter 18 once the bunker systems are working.'],
+  [6,'The lift is running. People upstairs still need clean air.'],
+  [10,'The filters are running. The Ashback came from Acoustic Isolation.'],
+  [13,'Noor’s log says the research subjects could imitate human voices before the strike.'],
+  [14,'The transfer pod is ready. The optional service gate west of the pod leads to maintenance sectors.'],
+ ];
+ $('journal-brief').textContent='Find out what escaped, help the survivors and reach the next shelter underground.';
+ function list(id,lines){
+  $(id).replaceChildren(...lines.map(line=>{const item=document.createElement('li');item.textContent=line;return item;}));
+ }
+ list('journal-events',facts.filter(([step])=>story.step>=step).map(([,line])=>line));
+ const outcomes={unresolved:'Not yet reached',sheltered:'Sheltered',lost:'Lost','at-risk':'In danger'};
+ list('journal-allies',BUNKER_ALLIES.map(person=>person.name+' · '+person.role+' · '+outcomes[story.survivors[person.id]]));
+ const record=serviceSector(serviceRead);
+ $('journal-service').hidden=!record;
+ if(record)$('journal-service').textContent='Last service record · '+record.name+'. '+record.note;
+ screen('journal');$('journal-close').focus();
+}
+function closeJournal(){
+ if(mode!=='journal')return;
+ frameTime=performance.now();voice.resume();audio.resume();screen('hud');
+}
 function paintHUD(){
  const task=current();
  if(!task)return;
+ const sector=serviceSector(player.floor);
  const floor=BUNKER_LEVELS[player.floor];
- changeText($('floor'),`B${player.floor+1} · ${(floor?.name||'SHELTER 17').toUpperCase()} · ${story.step+1}/${BUNKER_OBJECTIVES.length}`);
- const target=task.floor===player.floor?task:task.floor>player.floor?nextLift:returnLift;
+ const service=serviceAction(sector);
+ const optional=$('nearby');
+ optional.hidden=!sector&&!(player.floor===2&&story.flags.transfer);
+ if(!optional.hidden)changeText(optional,sector?'Express return at the entrance · B3 Deep Relay':'Optional · Service gate west of the transfer pod');
+ changeText($('floor'),sector?`SERVICE ${sector.number} · ${sector.name.toUpperCase()}`:`B${player.floor+1} · ${(floor?.name||'SHELTER 17').toUpperCase()} · ${story.step+1}/${BUNKER_OBJECTIVES.length}`);
+ const target=sector?(serviceRead===player.floor?SERVICE_EXIT:sector.terminal):task.floor===player.floor?task:task.floor>player.floor?nextLift:returnLift;
  const gap=distance(player,target);
- changeText($('goal'),task.floor===player.floor?task.title:`Take the lift to B${task.floor+1}`);
- changeText($('detail'),task.floor===player.floor?task.detail:`Your current objective is on B${task.floor+1}.`);
+ changeText($('goal'),sector?(serviceRead===player.floor?'Enter the next service sector':'Read the maintenance log'):task.floor===player.floor?task.title:`Take the lift to B${task.floor+1}`);
+ changeText($('detail'),sector?(serviceRead===player.floor?'Gate cleared · cross the hall to the north door':sector.fixture+' · find the lit terminal to unlock the next gate'):task.floor===player.floor?(task.kind==='threat'?task.detail+' · aim until the dot turns green, then fire':task.detail):`Your current objective is on B${task.floor+1}.`);
  const bearing=Math.atan2(target.x-player.x,-(target.z-player.z))+player.yaw;
  $('arrow').style.transform=`rotate(${bearing}rad)`;
  changeText($('distance'),`${Math.ceil(gap)} m`);
  changeText($('health'),`HEALTH ${'●'.repeat(player.health)}${'○'.repeat(3-player.health)}`);
  const safe=Object.values(story.survivors).filter(outcome=>outcome==='sheltered').length;
  changeText($('allies'),`ALLIES SAFE ${safe}/${BUNKER_ALLIES.length}`);
- const ready=gap<2.45&&task.kind!=='threat';
- const back=player.floor>0&&distance(player,returnLift)<2.45;
- $('use').classList.toggle('ready',ready||back);
- changeText($('prompt'),ready?`USE · ${task.floor===player.floor?(task.label||task.title):'Lift'}`:back?'USE · Return lift':'');
- $('fire').hidden=player.floor===0;
+ const ready=!sector&&gap<2.45&&task.kind!=='threat';
+ const back=!sector&&player.floor>0&&distance(player,returnLift)<2.45;
+ $('use').classList.toggle('ready',ready||back||!!service);
+ changeText($('prompt'),ready?`USE · ${task.floor===player.floor?(task.label||task.title):'Lift'}`:service?`USE · ${service.label}`:back?'USE · Return lift':'');
+ $('fire').hidden=player.floor===0||!!sector;
  $('fire').disabled=cooldown>0;
  document.body.classList.toggle('aimed',targetInSight(threat));
  marker.position.set(target.x,ground(player.floor)+.025,target.z);marker.visible=task.floor!==player.floor||task.kind!=='threat';
@@ -308,8 +368,17 @@ function tick(now){
   if(hurt===0)document.body.classList.remove('hit');
   if(lift){
    lift.elapsed+=dt;
-   if(lift.elapsed>=.42&&!lift.placed){setFloor(lift.floor);lift.placed=true;syncPeople();save();}
-   if(lift.elapsed>=.74){lift=null;$('lift-fade').style.opacity='0';}
+   if(lift.elapsed>=.42&&!lift.placed){setFloor(lift.floor,lift.spawn||undefined);lift.placed=true;syncPeople();save();}
+   if(lift.elapsed>=.74){
+    const serviceTrip=Boolean(lift.spawn);
+    lift=null;$('lift-fade').style.opacity='0';
+    if(serviceTrip){
+     const sector=serviceSector(player.floor);
+     say('SERVICE SYSTEM',sector
+      ? sector.name+'. Read the terminal to unlock the next sector.'
+      : 'Deep Relay. The transfer pod to Shelter 18 is ready.',false);
+    }
+   }
   }else if(death){
    death.time+=dt;
    const fall=clamp(death.time/1.35,0,1);
@@ -331,8 +400,8 @@ function tick(now){
   if(now-hudTime>75){paintHUD();hudTime=now;}
  }
  people.update(dt,time,{player:world.camera.position,reducedMotion:settings.motion});
- equipment.update(dt,time,{visible:mode==='hud'&&player.floor>0&&!lift&&!death,selected:'arc',effect:flash,...movement,reducedMotion:settings.motion});
- world.update(dt,time,player,{floor:player.floor,stage:current()?.id,flashlight:true,danger:!!threat});
+ equipment.update(dt,time,{visible:mode==='hud'&&player.floor>0&&player.floor<SERVICE_FIRST&&!lift&&!death,selected:'arc',effect:flash,...movement,reducedMotion:settings.motion});
+ world.update(dt,time,player,{floor:player.floor,stage:current()?.id,flashlight:true,danger:!!threat,blackout:player.floor>=SERVICE_FIRST ? .30 : threat ? .12 : 0});
  world.render();
 }
 
@@ -345,6 +414,7 @@ function bind(){
  $('start').onclick=()=>start();$('continue').onclick=()=>start(read(saveKey));
  $('retry').onclick=()=>start(read(saveKey));$('pause').onclick=pause;$('resume').onclick=resume;
  $('quit').onclick=$('end-home').onclick=showHome;
+ $('brief').onclick=showJournal;$('journal-close').onclick=closeJournal;
  $('decision-back').onclick=()=>{voice.stop();screen('hud');};
  $('use').onclick=use;$('fire').onclick=fire;
  $('run').onclick=()=>{sprint=!sprint;$('run').setAttribute('aria-pressed',String(sprint));};
@@ -364,7 +434,8 @@ function bind(){
  zone.onpointerup=e=>{if(e.pointerId===look.id){look.id=null;if(e.pointerType==='mouse'&&look.travel<7)fire();}};
  zone.onpointercancel=zone.onlostpointercapture=e=>{if(e.pointerId===look.id)look.id=null;};
  addEventListener('keydown',e=>{
-  if(e.code==='Escape'&&!e.repeat){if(mode==='paused')resume();else if(mode==='decision')$('decision-back').click();else pause();return;}
+  if(e.code==='KeyJ'&&!e.repeat){if(mode==='journal')closeJournal();else showJournal();return;}
+  if(e.code==='Escape'&&!e.repeat){if(mode==='journal')closeJournal();else if(mode==='paused')resume();else if(mode==='decision')$('decision-back').click();else pause();return;}
   if(mode!=='hud')return;
   if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code))e.preventDefault();
   keys.add(e.code);if(e.repeat)return;

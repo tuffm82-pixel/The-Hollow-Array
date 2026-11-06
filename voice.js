@@ -6,6 +6,13 @@ export function createVoice() {
   let enabled=true, unlocked=false, paused=false, disposed=false;
   let voices=[], active=null, generation=0, timer=null, deadline=0, remaining=0;
   const queue=[];
+  const profiles={
+    radio:{voice:/Samantha|Karen|Serena|Moira|Sonia|Jenny|Aria|Libby/i,rate:.94,pitch:1.02,volume:.83},
+    mara:{voice:/Karen|Moira|Sonia|Samantha/i,rate:.93,pitch:1.01,volume:.89},
+    ivo:{voice:/Daniel|Arthur|Gordon|George|James|David|Guy/i,rate:.90,pitch:.87,volume:.86},
+    noor:{voice:/Serena|Samantha|Aria|Libby/i,rate:1.01,pitch:1.10,volume:.86},
+    mimic:{voice:/Daniel|Arthur|Gordon|George|James|David|Guy/i,rate:.76,pitch:.58,volume:.78},
+  };
   function refreshVoices(){try{voices=synth?.getVoices?.()||[];}catch{voices=[];}}
   function clearTimer(){clearTimeout(timer);timer=null;}
   function armTimer(milliseconds){
@@ -23,9 +30,7 @@ export function createVoice() {
   }
   function chooseVoice(speaker){
     const english=voices.filter(voice=>/^en(?:[-_]|$)/i.test(voice.lang));
-    const preferred=speaker==='mimic'
-      ? /Daniel|Arthur|Gordon|George|James|David|Guy/i
-      : /Samantha|Karen|Serena|Moira|Sonia|Jenny|Aria|Libby/i;
+    const preferred=profiles[speaker].voice;
     return english.find(voice=>voice.localService&&preferred.test(voice.name))
       ||english.find(voice=>preferred.test(voice.name))
       ||english.find(voice=>voice.localService&&/en[-_](AU|GB)/i.test(voice.lang))
@@ -38,9 +43,10 @@ export function createVoice() {
     const chosen=chooseVoice(item.speaker);
     if(chosen)utterance.voice=chosen;
     utterance.lang=chosen?.lang||'en-AU';
-    utterance.rate=item.speaker==='mimic'?.76:.94;
-    utterance.pitch=item.speaker==='mimic'?.58:1.02;
-    utterance.volume=item.speaker==='mimic'?.78:.83;
+    const profile=profiles[item.speaker];
+    utterance.rate=profile.rate;
+    utterance.pitch=profile.pitch;
+    utterance.volume=profile.volume;
     active={...item,utterance};
     const finish=()=>{
       if(disposed||token!==generation||active?.utterance!==utterance)return;
@@ -73,7 +79,7 @@ export function createVoice() {
     if(interrupt)stop();
     if(active?.text===clean||queue.some(item=>item.text===clean))return true;
     if(queue.length>=3)queue.shift();
-    queue.push({text:clean,speaker:speaker==='mimic'?'mimic':'radio'});pump();return true;
+    queue.push({text:clean,speaker:Object.hasOwn(profiles,speaker)?speaker:'radio'});pump();return true;
   }
   function pause(){
     if(disposed||paused)return;

@@ -7,6 +7,42 @@ export const BUNKER_LEVELS=Object.freeze([
  {id:1,name:'Power and Water',description:'Generator hall and water filtration',near:'GENERATOR HALL',far:'WATER / FILTRATION'},
  {id:2,name:'Isolation and Deep Relay',description:'Containment ward, deep relay and evacuation',near:'ISOLATION WARD',far:'DEEP RELAY'},
 ]);
+export const SERVICE_FIRST = 3;
+export const SERVICE_ACCESS = {x:-5,z:-9.5};
+export const SERVICE_ENTRY = {x:0,z:16};
+export const SERVICE_EXIT = {x:0,z:-17};
+export const SERVICE_RETURN = {x:-8,z:17};
+
+const serviceTypes = [
+ {name:'Reservoir', fixture:'Pressure vessels', note:'The air knock travels through the old water line. Shutoff valves for Shelter 18 were installed from the inside.'},
+ {name:'Freight depot', fixture:'Evacuation pallets', note:'Transfer manifest: six passengers left Shelter 17. The arrival microphone recorded seven voices.'},
+ {name:'Switchgear hall', fixture:'Power transformers', note:'The strike dropped mains power. A voice on the emergency loop requested that the acoustic cells be opened.'},
+ {name:'Reclamation plant', fixture:'Waste scrubbers', note:'Do not work alone. If a colleague calls from inside an empty duct, verify their badge at the nearest station.'},
+ {name:'Archive vault', fixture:'Tape cabinets', note:'Acoustic trial 08: the second voice repeated an answer that the subject had only thought about.'},
+];
+const serviceColors = [
+ {base:0x879594,trim:0x34696b,lit:0x9adad7,warm:0xe5ab70,dark:0x233335},
+ {base:0x998e7c,trim:0x8a6141,lit:0xe3cb96,warm:0xef8d62,dark:0x39332b},
+ {base:0x818c9e,trim:0x465b84,lit:0xa9c7fc,warm:0xf2a971,dark:0x282f42},
+];
+let cachedSectorFloor=-1,cachedSector=null;
+export function serviceSector(floor) {
+ if (!Number.isSafeInteger(floor) || floor < SERVICE_FIRST) return null;
+ if(floor===cachedSectorFloor)return cachedSector;
+ const seed = Math.imul((floor ^ (floor / 4294967296)) >>> 0, 0x9e3779b1) >>> 0;
+ const variant = (floor - SERVICE_FIRST + Math.floor((floor - SERVICE_FIRST) / 5) % 5) % serviceTypes.length;
+ const side = seed & 0x10000 ? -1 : 1;
+ const obstacles = [-10,-2,6].flatMap(z=>[-1,1].map(bank=>({
+  x:bank * (6.8 + (seed >>> 26 & 3) * .55), z:z + bank * side * 1.3, halfX:2.05, halfZ:1.65,
+ })));
+ const terminal = {x:side*4.9,z:-13};
+ obstacles.push({x:terminal.x,z:terminal.z-.86,halfX:.82,halfZ:.35});
+ cachedSectorFloor=floor;
+ cachedSector={...serviceTypes[variant],variant,seed,obstacles,terminal,number:floor-SERVICE_FIRST+1,colors:serviceColors[variant%3]};
+ return cachedSector;
+}
+
+export const bunkerGround = floor => -Math.min(floor,SERVICE_FIRST)*7;
 const WIDTH=22,DEPTH=26,ROOF=5.85,BULKHEAD=-2.4,PORTAL=4.5;
 const barriers=[
  {x:-7.75,z:BULKHEAD,halfX:3.25,halfZ:.21},
@@ -25,16 +61,19 @@ const sightObstacles=[
 ].map(boxes=>[...barriers,...boxes]);
 
 export function walkableBunker(floor,x,z,r=.28){
- if(!BUNKER_LEVELS[floor]||![x,z,r].every(Number.isFinite)||r<0)return false;
- if(Math.abs(x)>WIDTH/2-r||Math.abs(z)>DEPTH/2-r)return false;
- return !collisionByDeck[floor].some(box=>
+ const sector = serviceSector(floor);
+ if((!sector&&!BUNKER_LEVELS[floor])||![x,z,r].every(Number.isFinite)||r<0)return false;
+ const halfWidth = sector ? 15 : WIDTH/2, halfDepth = sector ? 20 : DEPTH/2;
+ if(Math.abs(x)>halfWidth-r||Math.abs(z)>halfDepth-r)return false;
+ return !(sector?.obstacles??collisionByDeck[floor]).some(box=>
   Math.abs(x-box.x)<box.halfX+r&&Math.abs(z-box.z)<box.halfZ+r
  );
 }
 
 export function bunkerSight(floor,from,to){
- if(!BUNKER_LEVELS[floor])return false;
- for(const box of sightObstacles[floor]){
+ const obstacles = sightObstacles[floor] ?? serviceSector(floor)?.obstacles;
+ if(!obstacles)return false;
+ for(const box of obstacles){
   let enter=0,exit=1;
   for(const [axis,half] of [['x','halfX'],['z','halfZ']]){
    const origin=from[axis],step=to[axis]-origin;
@@ -71,9 +110,9 @@ function placard(title,detail,color){
  return texture;
 }
 
-function makeDeck(scene,floor,materials){
+function makeDeck(scene,floor,materials,sector=null){
  const group=new THREE.Group();group.name='Bunker deck '+floor;
- group.position.y=-floor*7;scene.add(group);
+ group.position.y=bunkerGround(floor);scene.add(group);
  const parts=new Map(),textures=[];
  const matrix=new THREE.Matrix4(),rotation=new THREE.Quaternion(),position=new THREE.Vector3(),unit=new THREE.Vector3(1,1,1);
  function add(name,geometry,x,y,z,rx=0,ry=0,rz=0){
@@ -95,9 +134,74 @@ function makeDeck(scene,floor,materials){
  }
  const cylinder=(name,x,y,z,r,h,rx=0,ry=0,rz=0)=>add(name,new THREE.CylinderGeometry(r,r,h,12),x,y,z,rx,ry,rz);
  function sign(title,detail,x,y,z,ry,width=3){
-  const texture=placard(title,detail,paletteHex(palette[floor].lit));textures.push(texture);
+  const texture=placard(title,detail,paletteHex((sector?.colors??palette[floor]).lit));textures.push(texture);
   const mesh=new THREE.Mesh(new THREE.PlaneGeometry(width,width*.28125),new THREE.MeshBasicMaterial({map:texture}));
   mesh.position.set(x,y,z);mesh.rotation.y=ry;group.add(mesh);
+ }
+ function finishDeck(){
+  for(const [name,geometries] of parts){
+   const merged=mergeGeometries(geometries,false);
+   geometries.forEach(geometry=>geometry.dispose());
+   group.add(new THREE.Mesh(merged,materials[name]));
+  }
+  return {group,textures};
+ }
+ if(sector){
+  const height=8.3;
+  box('concrete',0,-.2,0,30.4,.4,40.4);
+  box('concrete',0,height+.2,0,30.4,.4,40.4);
+  for(const side of [-1,1]){
+   box('concrete',side*15.15,height/2,0,.3,height,40.6);
+   box('concrete',0,height/2,side*20.15,30.6,height,.3);
+   box('trim',side*14.95,1.15,0,.11,.35,40);
+   box('stripe',side*2.3,.013,0,.08,.022,39);
+   cylinder('trim',side*10,7.5,0,.29,39.7,Math.PI/2);
+   cylinder('steel',side*11,7.5,0,.15,39.7,Math.PI/2);
+  }
+  for(const z of [-17,-9,0,9,17]){
+   box('steel',0,7.92,z,30,.42,.45);
+   for(const x of [-8,0,8]){
+    box('dark',x,7.61,z,2.5,.2,.4);
+    box('glow',x,7.49,z,2.2,.05,.22);
+   }
+   for(const side of [-1,1])box('steel',side*14.75,4,z,.42,8,.52);
+  }
+  for(const obstacle of sector.obstacles.slice(0,-1)){
+   const {x,z}=obstacle;
+   box('dark',x,.19,z,4.1,.38,3.3);
+   if(sector.variant===0||sector.variant===3){
+    for(const offset of [-1,1]){
+     cylinder('steel',x+offset,2.2,z,1,3.7);
+     cylinder('trim',x+offset,3.97,z,1.05,.28);
+     cylinder('trim',x+offset,1.24,z,1.05,.16);
+     cylinder('steel',x+offset,4.77,z,.22,1.3);
+    }
+   }else{
+    const tiers=sector.variant===1?3:4;
+    for(let i=0;i<tiers;i++){
+     box(i%2?'trim':'steel',x,.73+i*.85,z,3.9,.76,2.9);
+     for(const side of [-1,1]){
+      box('dark',x+side*1.57,.82+i*.85,z, .15,.14,2.96);
+      box('warm',x+side*1.96,.82+i*.85,z+.68,.035,.10,.24);
+     }
+    }
+   }
+  }
+  const {x,z}=sector.terminal;
+  box('steel',x,.65,z-.86,1.64,1.3,.7);
+  box('glow',x,1.14,z-.49,.94,.40,.055);
+  sign('SERVICE LOG',sector.fixture.toUpperCase(),x,2.15,z-.84,0,2.8);
+  for(const door of [
+   {x:0,z:-19.6,ry:0,title:'NEXT SECTOR',sub:'MAINTENANCE CONNECTION'},
+   {x:-8,z:19.6,ry:Math.PI,title:'EXPRESS RETURN',sub:'B3 / DEEP RELAY'},
+   {x:0,z:19.6,ry:Math.PI,title:sector.name.toUpperCase(),sub:'SERVICE SECTOR '+sector.number},
+  ]){
+   box('dark',door.x,1.88,door.z,3.55,3.76,.52);
+   for(const side of [-1,1])box('glow',door.x+side*1.68,1.84,door.z+(door.ry?-.28:.28),.12,3.58,.06);
+   sign(door.title,door.sub,door.x,4.38,door.z+(door.ry?-.30:.30),door.ry,4);
+  }
+  sign(sector.name.toUpperCase(),'SERVICE SECTOR '+sector.number,0,5.35,-19.3,0,7);
+  return finishDeck();
  }
  const shell=[
   [-11.12,ROOF/2,0,.25,ROOF,26.6],
@@ -280,13 +384,11 @@ function makeDeck(scene,floor,materials){
   box('trim',0,1.64,-12.25,3.62,3.27,.25);
   for(const x of [-1.71,1.71])box('glow',x,1.64,-12.09,.087,3.1,.04);
   sign('EVACUATION POD','SUBSURFACE TRANSIT / SHELTER 18',0,4.38,-12.17,0,3.5);
+  box('dark',SERVICE_ACCESS.x,1.68,-12.25,2.45,3.35,.43);
+  for(const side of [-1,1])box('warm',SERVICE_ACCESS.x+side*1.15,1.65,-12.0,.11,3.3,.07);
+  sign('SERVICE NETWORK','OPTIONAL / RETURN TO RELAY',SERVICE_ACCESS.x,3.81,-12.0,0,3.25);
  }
- for(const [name,geometries] of parts){
-  const merged=mergeGeometries(geometries,false);
-  geometries.forEach(geometry=>geometry.dispose());
-  group.add(new THREE.Mesh(merged,materials[name]));
- }
- return {group,textures};
+ return finishDeck();
 }
 
 export function createBunkerWorld(canvas){
@@ -307,8 +409,8 @@ export function createBunkerWorld(canvas){
  const points=Array.from({length:4},()=>new THREE.PointLight(0xffffff,26,19,2));
  scene.add(...points);
  const allMaterials=new Set();
- const decks=BUNKER_LEVELS.map((level,floor)=>{
-  const colors=palette[floor];
+ function buildDeck(floor,sector=null){
+  const colors=sector?.colors??palette[floor];
   const standard=(color,roughness=.82,metalness=0)=>new THREE.MeshStandardMaterial({color,roughness,metalness});
   const luminous=(color,intensity=.72)=>new THREE.MeshStandardMaterial({color,emissive:color,emissiveIntensity:intensity});
   const concrete=makeWeatheredMaterial('concrete');concrete.color.setHex(colors.base);
@@ -318,8 +420,16 @@ export function createBunkerWorld(canvas){
    glow:luminous(colors.lit),warm:luminous(colors.warm),glass:luminous(0x335765,.42),
    stain:standard(0x251a17,.93),stainEdge:standard(0x33231f,.95)};
   Object.values(materials).forEach(material=>allMaterials.add(material));
-  return makeDeck(scene,floor,materials);
- });
+  return {...makeDeck(scene,floor,materials,sector),materials:Object.values(materials)};
+ }
+ const decks=BUNKER_LEVELS.map((_,floor)=>buildDeck(floor));
+ let serviceDeck=null;
+ function releaseDeck(deck){
+  deck.group.removeFromParent();
+  deck.textures.forEach(texture=>texture.dispose());
+  deck.group.traverse(node=>{if(node.isMesh){node.geometry.dispose();if(node.material.map&&deck.textures.includes(node.material.map))node.material.dispose();}});
+  for(const material of deck.materials){material.dispose();allMaterials.delete(material);}
+ }
  let active=-1;
  function resize(){
   const w=canvas.clientWidth||window.innerWidth,h=canvas.clientHeight||window.innerHeight;
@@ -327,12 +437,18 @@ export function createBunkerWorld(canvas){
   renderer.setSize(w,h,false);camera.aspect=w/Math.max(1,h);camera.updateProjectionMatrix();
  }
  function update(dt,time,player={},state={}){
-  const floor=BUNKER_LEVELS[player.floor]?player.floor:0,colors=palette[floor],base=-floor*7;
+  const sector=serviceSector(player.floor);
+  const floor=BUNKER_LEVELS[player.floor]||sector?player.floor:0;
+  const colors=sector?.colors??palette[floor],base=bunkerGround(floor);
   if(active!==floor){
    active=floor;
+   if(serviceDeck){releaseDeck(serviceDeck);serviceDeck=null;}
+   if(sector)serviceDeck=buildDeck(floor,sector);
+   camera.far=sector?82:65;camera.updateProjectionMatrix();
+   scene.fog.density=sector ? .027 : .032;
    decks.forEach(({group},index)=>{group.visible=index===floor;});
    for(const [index,light] of points.entries()){
-    light.position.set(index%2===0?-4.4:4.4,base+4.36,index<2?5.3:-7.6);
+    light.position.set(index%2===0?-4.4:4.4,base+(sector?5.65:4.36),index<2?8:-9);
     light.color.setHex(index===0?colors.warm:colors.lit);
    }
    scene.fog.color.setHex(colors.dark);
@@ -346,13 +462,8 @@ export function createBunkerWorld(canvas){
   }
  }
  function dispose(){
-  const geometries=new Set(),materials=new Set(allMaterials);
-  for(const {group,textures} of decks){
-   textures.forEach(texture=>texture.dispose());
-   group.traverse(node=>{if(node.isMesh){geometries.add(node.geometry);materials.add(node.material);}});
-  }
-  geometries.forEach(geometry=>geometry.dispose());
-  materials.forEach(material=>material.dispose());
+  decks.forEach(releaseDeck);
+  if(serviceDeck)releaseDeck(serviceDeck);
   renderer.dispose();
  }
  resize();update(0,0);

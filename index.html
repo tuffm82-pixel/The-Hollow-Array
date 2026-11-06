@@ -12,9 +12,9 @@
  <canvas id="scene" aria-label="First-person view inside Last Shelter"></canvas>
  <div id="vignette"></div><div id="lift-fade" aria-hidden="true"></div>
  <main id="home" class="panel home">
-  <p class="eyebrow">THE HOLLOW ARRAY / NEW CAMPAIGN</p>
+  <p class="eyebrow">THE HOLLOW ARRAY / SHELTER 17</p>
   <h1>Last Shelter</h1>
-  <p class="intro">A nuclear strike has sealed the surface. You wake beneath it in Shelter 17. Three bodies lie by the airlock. Someone deeper down is still answering the radio.</p>
+  <p class="intro">A nuclear strike has sealed the surface. You wake beneath it in Shelter 17. Three bodies lie by the airlock. Find the survivors and restore the systems that keep them alive. An underground transfer pod may be your only way out.</p>
   <button id="start" class="primary">ENTER THE BUNKER</button>
   <button id="continue" hidden>CONTINUE</button>
   <label class="check"><input type="checkbox" id="sound" checked> Sound and voices</label>
@@ -28,19 +28,26 @@
     <h2 id="goal"></h2>
     <p id="detail"></p>
    </div>
-   <button id="pause" aria-label="Pause">Ⅱ</button>
+   <div class="hud-buttons"><button id="brief" aria-label="Open mission log">LOG</button><button id="pause" aria-label="Pause">Ⅱ</button></div>
   </header>
   <div id="status" class="status"><span id="health"></span><span id="allies"></span></div>
   <div id="reticle" aria-hidden="true"></div>
   <div id="bearing" aria-hidden="true"><span id="arrow">↑</span><span id="distance"></span></div>
   <div id="prompt"></div>
+  <div id="nearby" hidden></div>
   <div id="dialogue" hidden aria-live="polite"><span id="speaker"></span><p id="line"></p></div>
   <div id="look" aria-label="Drag to look"></div>
   <div id="stick" aria-label="Movement control"><div id="knob"></div><small>MOVE</small></div>
   <div class="actions"><button id="use">USE</button><button id="fire">FIRE</button><button id="run" aria-pressed="false">RUN</button></div>
-  <p class="controls">WASD move · Drag look · E use · F fire · Shift sprint</p>
+  <p class="controls">WASD move · Drag look · E use · F fire · J log · Shift sprint</p>
  </section>
  <section id="paused" class="panel overlay" hidden><p class="eyebrow">SHELTER 17</p><h2>Paused</h2><button id="resume" class="primary">RESUME</button><button id="quit">MAIN MENU</button></section>
+ <section id="journal" class="panel overlay" hidden aria-labelledby="journal-title">
+  <p class="eyebrow">SHELTER 17 FIELD LOG</p><h2 id="journal-title">What happened</h2>
+  <p id="journal-brief"></p><ul id="journal-events"></ul>
+  <h3>Survivors</h3><ul id="journal-allies"></ul>
+  <p id="journal-service" hidden></p><button id="journal-close" class="primary">BACK TO GAME</button>
+ </section>
  <section id="decision" class="panel overlay" hidden role="dialog" aria-modal="true" aria-labelledby="decision-title"><p class="eyebrow" id="decision-speaker">SHELTER 17</p><h2 id="decision-title"></h2><p id="decision-detail"></p><div id="decision-options"></div><button id="decision-back">BACK</button></section>
  <section id="ending" class="panel overlay" hidden><p class="eyebrow" id="end-label"></p><h2 id="end-title"></h2><p id="end-copy"></p><ul id="end-allies"></ul><button id="retry" class="primary">RETRY CHECKPOINT</button><button id="end-home">MAIN MENU</button></section>
  <div id="fatal" class="panel overlay" hidden><h2>Unable to enter</h2><p>The bunker needs WebGL 2. Try reopening the game in Safari or Chrome.</p></div>

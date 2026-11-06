@@ -1,4 +1,4 @@
-export const BUNKER_OPENING = 'The strike cut power to Shelter 17. You woke up in intake. Three people are down by the airlock. Check for survivors.';
+export const BUNKER_OPENING = 'Shelter 17 emergency broadcast. A nuclear strike cut our power. The surface is sealed against fallout. Check the three people by the airlock, then find Mara in triage.';
 
 export const BUNKER_BODIES = [
   {id:'body-1', floor:0, x:-2.6, z:6.6, name:'Intake guard'},
@@ -23,15 +23,15 @@ function objective(id, floor, x, z, title, detail, label, line, options = {}) {
 
 export const BUNKER_OBJECTIVES = [
   objective('body-1', 0, -2.6, 6.6, 'Check the intake guard', 'Emergency Triage · first body by the arrival bay', 'Check for a pulse',
-    'No pulse. The guard is still holding the override key.'),
+    'No pulse. The guard’s dose badge is off the scale. The inner airlock held, but he was still outside it when the strike hit.'),
   objective('body-2', 0, 0, 4.8, 'Check the second body', 'Emergency Triage · between the triage bays', 'Check for breathing',
-    'No breathing. There are drag marks from the airlock to this spot. They got this far.'),
+    'No breathing. A trail leads here from the lift, away from the surface airlock. Something attacked this resident from inside the shelter.'),
   objective('body-3', 0, 2.6, 6.1, 'Check the containment technician', 'Emergency Triage · beside the east bay', 'Check the technician',
-    'They’re gone. Their pager says Lower Isolation opened when the strike cut power.'),
+    'They’re gone. The pager reads: isolation locks released on power failure. It mentions an acoustic research wing beneath the shelter.'),
   objective('blast-door', 0, -7.8, 7.5, 'Read the surface radiation monitor', 'Intake · west airlock console', 'Read the monitor',
-    'Fallout beyond the airlock is lethal. The surface hatch is locked. Use the underground transfer line.'),
+    'The monitor shows lethal fallout. The surface hatch stays sealed. An underground pod can reach Shelter 18 once power, air and communications are restored.'),
   objective('mara', 0, 6, 4, 'Help Mara in the triage bay', 'Emergency Triage · find the medic beside the east wall', 'Speak to Mara',
-    'I can shut the intake from here. But when you restore power, these doors will unlock. Please get me behind that inner shutter first.', {
+    'I’m Mara, the intake medic. The alarm is coming from the lift. When you restore power, the damaged intake locks will cycle. Please get me behind the manual shutter first.', {
       kind:'choice',
       choices:[
         {id:'shelter', label:'Move Mara behind the inner shutter', detail:'Mara reaches shelter before the intake doors reopen.'},
@@ -51,7 +51,7 @@ export const BUNKER_OBJECTIVES = [
       ],
     }),
   objective('crawler', 1, 0, -6, 'Stop the Ashback', 'Filtration and Water Works · fight from cover and keep the doorway clear', 'Stop the Ashback',
-    'The Ashback is down. Get the filters running before we lose the air in intake.', {kind:'threat'}),
+    'The Ashback is down. Its restraint tag reads Acoustic Isolation. Restart the filters before the people upstairs run out of clean air.', {kind:'threat'}),
   objective('filtration', 1, 6, -6, 'Restart air filtration', 'Filtration and Water Works · east pump console', 'Start the filters',
     'Clean air is flowing again. The last working radio is down in the isolation ward.'),
   objective('lift-2', 1, 0, -10, 'Take the lift to Level B3', 'Filtration and Water Works · north lift', 'Descend to B3',
@@ -62,7 +62,7 @@ export const BUNKER_OBJECTIVES = [
       {id:'broadcast', label:'Have Noor transmit the call live', detail:'Noor will be exposed at the antenna.'},
     ]}),
   objective('warden', 2, -5, -6, 'Stop the Hollow Warden', 'Deep Relay · get behind cover when it rushes you', 'Stop the Hollow Warden',
-    'The Warden is down. The deep relay controls the underground transfer pod.', {kind:'threat'}),
+    'The Warden is down. The deep relay controls the transfer pod. Noor’s log says the research subjects could imitate voices before the blast.', {kind:'threat'}),
   objective('relay', 2, 5, -7, 'Open the underground transfer route', 'Deep Relay · east transfer console', 'Open the transfer route',
     'Transfer route unlocked. The pod goes through the rock to the next shelter. The surface hatch stays sealed.'),
   objective('escape', 2, 0, -10, 'Board the underground transfer pod', 'Escape Pod · north platform', 'Board the pod',

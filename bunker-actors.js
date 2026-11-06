@@ -43,6 +43,7 @@ function makeMaterials(palette) {
   cheek:mat(new THREE.Color(palette.skin).multiplyScalar(.77)),
   hair:mat(palette.hair,.94), boot:mat(0x1c2226,.70), steel:mat(0x8f9ca0,.43,{metalness:.43}),
   patch:mat(palette.patch,.69), thread:mat(0x2c3838,.91),
+  ivory:mat(0xb9ab92,.83), lens:mat(0x364e51,.29,{metalness:.28}),
   status:mat(0x7be3bf,.46,{emissive:0x307352,emissiveIntensity:.52}),
  };
 }
@@ -66,7 +67,7 @@ function makeRig(palette,alive){
  root.name=palette.name;
  root.userData.friendly=alive;
  const hips=pivot(root),chest=pivot(hips,0,.07,0),head=pivot(chest,0,.49,0);
- const arms=[],elbows=[],thighs=[],knees=[];
+ const arms=[],elbows=[],thighs=[],knees=[],eyes=[];
 
  ellipsoid(hips,mat.pants,[0,.014,.006],[.209,.145,.130]);
  capsule(chest,mat.jacket,[0,.218,0],.205,.127,[1,.99,.63]);
@@ -90,7 +91,11 @@ function makeRig(palette,alive){
  for(const side of [-1,1]){
   ellipsoid(head,mat.skin,[side*.097,.115,.001],[.018,.032,.019]);
   ellipsoid(head,mat.hair,[side*.042,.137,-.084],[.024,.007,.012]);
-  if(alive)ellipsoid(head,mat.thread,[side*.040,.126,-.091],[.014,.008,.007]);
+  if(alive){
+   const eye=pivot(head,side*.040,.126,-.089);eyes.push(eye);
+   ellipsoid(eye,mat.ivory,[0,0,0],[.017,.008,.009]);
+   ellipsoid(eye,mat.thread,[0,0,-.008],[.006,.007,.004]);
+  }
  }
  ellipsoid(head,mat.hair,[0,.185,.033],[.103,.077,.088]);
  if(palette.role==='engineer'){
@@ -132,14 +137,40 @@ function makeRig(palette,alive){
   panel(chest,mat.status,[-.145,.334,-.126],[.032,.015,.005]);
   capsule(chest,mat.boot,[-.149,.425,-.098],.006,.114,[1,1,1],[0,0,-.12]);
   if(palette.role==='medic'){
+   // Hard shell trauma bag and diagonal webbing.
+   capsule(chest,mat.seam,[.13,.18,.14],.096,.18,[1,1,.72],[0,0,.13]);
+   panel(chest,mat.patch,[.13,.19,.211],[.105,.061,.014]);
+   panel(chest,mat.boot,[.045,.26,-.146],[.035,.35,.017],[0,0,-.52]);
+   ellipsoid(head,mat.hair,[.051,.112,.116],[.052,.065,.050]);
    panel(chest,mat.patch,[.123,.321,-.119],[.081,.067,.013]);
    panel(chest,mat.seam,[.123,.321,-.129],[.043,.012,.004]);
    panel(chest,mat.seam,[.123,.321,-.130],[.012,.045,.004]);
+  }else if(palette.role==='engineer'){
+   // Bench goggles stowed on the cap and insulated tools on the belt.
+   panel(head,mat.boot,[0,.174,-.097],[.167,.036,.021]);
+   for(const side of [-1,1]){
+    ellipsoid(head,mat.steel,[side*.042,.184,-.111],[.039,.026,.017]);
+    ellipsoid(head,mat.lens,[side*.042,.184,-.125],[.031,.019,.009]);
+   }
+   capsule(hips,mat.boot,[-.18,.08,-.058],.027,.14,[1,1,1],[0,0,-.20]);
+   capsule(hips,mat.steel,[-.164,.168,-.058],.013,.10);
+   panel(chest,mat.ivory,[0,.192,-.146],[.285,.027,.015]);
+  }else{
+   // Noor's field headset, boom microphone and communications pack.
+   for(const side of [-1,1]){
+    ellipsoid(head,mat.boot,[side*.105,.119,.014],[.024,.049,.039]);
+    ellipsoid(head,mat.seam,[side*.123,.119,.014],[.014,.036,.030]);
+   }
+   capsule(head,mat.steel,[.096,.091,-.055],.005,.10,[1,1,1],[Math.PI/2,0,-.10]);
+   ellipsoid(head,mat.boot,[.094,.09,-.116],[.013,.011,.018]);
+   panel(chest,mat.boot,[0,.229,.153],[.26,.28,.11]);
+   capsule(chest,mat.steel,[.12,.435,.175],.008,.24,[1,1,1],[0,0,-.09]);
+   ellipsoid(chest,mat.seam,[0,.414,-.025],[.111,.044,.110]);
   }
  }
 
  hips.scale.setScalar(palette.height);
- const rig={root,hips,chest,head,arms,elbows,thighs,knees,mat,scale:palette.height,alive};
+ const rig={root,hips,chest,head,arms,elbows,thighs,knees,eyes,mat,scale:palette.height,alive};
  return rig;
 }
 
@@ -150,6 +181,9 @@ function applyPose(rig,pose,time=0,look=0,reducedMotion=false){
  rig.chest.rotation.x=pose.chest+breath;
  rig.chest.scale.set(1+breath*.35,1+breath*.25,1+breath);
  rig.head.rotation.set(pose.head+breath*.48,look,-pose.roll*.14);
+ const blink = (time + rig.scale*11) % 4.7;
+ const lid = Math.abs(pose.lean)>1 ? .12 : blink<.16 ? .12+.88*Math.abs(blink-.08)/.08 : 1;
+ for(const eye of rig.eyes)eye.scale.y=lid;
  rig.thighs[0].rotation.x=pose.thighL;rig.thighs[1].rotation.x=pose.thighR;
  rig.knees[0].rotation.x=pose.kneeL;rig.knees[1].rotation.x=pose.kneeR;
  rig.arms[0].rotation.set(pose.armL,0,pose.spreadL);

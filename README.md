@@ -4,7 +4,7 @@
 
 A nuclear strike has sealed the surface. Wake up in Shelter 17, investigate the three bodies by the airlock, then explore Intake, Engineering and Quarantine. Help the survivors, restore the shelter's systems and find a way deeper underground.
 
-On iPad, open the play link in Safari and tap **Enter the bunker**. Use the left thumbstick to move, drag the right side to look, and tap **Use** or **Fire**. On desktop, use **WASD**, drag or use the arrows to look, **E** to interact, **F** to fire and **Shift** to run. The current objective, floor and direction appear at the top. Checkpoints save on your device.
+On iPad, open the play link in Safari and tap **Enter the bunker**. Use the left thumbstick to move, drag the right side to look, and tap **Use** or **Fire**. On desktop, use **WASD**, drag or use the arrows to look, **E** to interact, **F** to fire and **Shift** to run. The current objective, floor and direction appear at the top. Checkpoints save on your device. Open **Log** (or press **J**) to review the story and survivor status. Once the transfer route is open, the optional service gate west of the pod leads to procedurally generated halls. Read the logs to move deeper or take the express return to the relay.
 
 [Play the original Observatory campaign](https://tuffm82-pixel.github.io/The-Hollow-Array/observatory.html) · [Creature animation preview](https://tuffm82-pixel.github.io/The-Hollow-Array/animation-lab.html)
 
