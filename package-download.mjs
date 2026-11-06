@@ -5,7 +5,7 @@ import {deflateRawSync} from 'node:zlib';
 import {build} from 'vite';
 const root=process.env.HOLLOW_OUTPUT_DIR||process.argv[2]||'dist/glasshouse';
 const sourceRoot=fileURLToPath(new URL('.',import.meta.url));
-// The hosted build has two pages with shared chunks. Make a separate in-memory
+// The hosted build has multiple pages with shared chunks. Make a separate in-memory
 // single-entry bundle for file:// use, with GLBs embedded as data URLs and no
 // imports that would require a local server. No output files are overwritten.
 const offline=await build({configFile:false,root:sourceRoot,base:'./',logLevel:'warn',build:{write:false,assetsInlineLimit:Infinity,rollupOptions:{input:resolve(sourceRoot,'index.html'),output:{inlineDynamicImports:true}}}});
@@ -19,7 +19,7 @@ for(const [tag,url] of [...html.matchAll(/<script\b[^>]*src="([^"]+)"[^>]*><\/sc
 for(const [tag,url] of [...html.matchAll(/<link\b[^>]*href="([^"]+\.css)"[^>]*>/g)]){const css=builtFile(url);html=html.replace(tag,()=>`<style>${css}</style>`);}
 html=html.replace(/<link\b[^>]*rel="(?:modulepreload|icon)"[^>]*>/g,'');
 const playUrl=process.env.HOLLOW_PLAY_URL||'https://tuffm82-pixel.github.io/The-Hollow-Array/';
-const instructions=`THE HOLLOW ARRAY — DOWNLOAD EDITION\r\n\r\nExtract this ZIP and open THE HOLLOW ARRAY.html in a desktop browser. No install needed.\r\nFor iPad use the hosted Safari link: ${playUrl}\r\n\r\nWASD move / drag to look / E use / Shift run / H hide / Escape pause.\r\nTouch: left joystick, right swipe, USE, RUN, HIDE.\r\nExplore Halcyon Ridge Observatory. Find ARC, ECHO and CRYO. Defeat three creatures using their weaknesses and finish Chapter One. Click or press F to fire. On touch, tap FIRE. Use the marked room equipment to open each creature’s armour. Keys 1/2/3 switch tools. J opens the Field Journal and map. Tap or click the HUD journal button on touch. Checkpoints and discoveries save on this device.\r\nGraphics, models and sound effects are embedded; the downloaded game works offline. Spoken dialogue uses your device voices where available and may depend on the device's installed voices. Tap REPLAY RADIO to repeat a line.\r\n`;
+const instructions=`THE HOLLOW ARRAY — DOWNLOAD EDITION\r\n\r\nExtract this ZIP and open THE HOLLOW ARRAY.html in a desktop browser. No install needed.\r\nFor iPad use the hosted Safari link: ${playUrl}\r\n\r\nWASD move / drag or arrows to look / E use / Shift run / F fire / Escape pause.\r\nTouch: left joystick, right swipe, USE, RUN, FIRE.\r\nExplore Shelter 17 after the strike. Follow the objective at the top, help survivors and take the lifts through three levels. The surface is sealed. Checkpoints save on this device.\r\nGraphics, models and sound effects are embedded. Dialogue uses device voices where available; subtitles always appear.\r\n`;
 function crc32(data){let c=0xffffffff;for(const n of data){c^=n;for(let i=0;i<8;i++)c=(c>>>1)^((c&1)?0xedb88320:0);}return(c^0xffffffff)>>>0;}
 const manifest=JSON.parse(await readFile(resolve(sourceRoot,'assets/creatures/manifest.json'),'utf8'));
 const sources='CREATURE MODEL SOURCES\r\n\r\nSource meshes: CC0 1.0 Universal https://creativecommons.org/publicdomain/zero/1.0/\r\nCustom skeletal rigs and idle, walk, run, attack, stagger and death clips authored for THE HOLLOW ARRAY.\r\n\r\n'+manifest.map(asset=>`${asset.id}: ${asset.source}\r\nSource SHA256: ${asset.sourceSHA256}\r\n`).join('\r\n');

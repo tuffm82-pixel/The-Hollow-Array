@@ -1,15 +1,9 @@
-# CLICK ME
+# Click me to play Last Shelter
 
-## [▶ PLAY THE HOLLOW ARRAY](https://tuffm82-pixel.github.io/The-Hollow-Array/)
+[▶ Play in your browser](https://tuffm82-pixel.github.io/The-Hollow-Array/)
 
-**Chapter One: Static in the Pines** — an abandoned mountain observatory, three creatures, three tools, machinery puzzles and a cliffhanger ending.
+[↓ Download the offline desktop version](https://raw.githubusercontent.com/tuffm82-pixel/The-Hollow-Array/main/downloads/THE-HOLLOW-ARRAY.zip)
 
-Open in Safari on iPad, turn sideways and tap **ENTER STATION**. Left thumb moves; swipe the right side to look. Tap the tool buttons to switch equipment. Aim at the creature’s body and tap **FIRE**. Use the marked room equipment to open its armour first.
+On iPad, use the browser link. On desktop, you can extract the ZIP and open **THE HOLLOW ARRAY.html**.
 
-## [⬇ DOWNLOAD FOR OFFLINE DESKTOP PLAY](https://raw.githubusercontent.com/tuffm82-pixel/The-Hollow-Array/main/downloads/THE-HOLLOW-ARRAY.zip)
-
-Extract the ZIP and open **THE HOLLOW ARRAY.html**. No installer or account is required. Use the browser link above on iPad.
-
-[Controls, story and settings](README.md)
-
-[Preview the creature animations](https://tuffm82-pixel.github.io/The-Hollow-Array/animation-lab.html)
+[Original Observatory campaign](https://tuffm82-pixel.github.io/The-Hollow-Array/observatory.html)
